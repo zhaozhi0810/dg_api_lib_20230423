@@ -1,0 +1,1 @@
+cmd_/home/dazhi/3399pro/rootfs_deepin/jc_keyboard_driver/jc_keyboard.ko := aarch64-linux-gnu-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/dazhi/3399pro/rootfs_deepin/jc_keyboard_driver/jc_keyboard.ko /home/dazhi/3399pro/rootfs_deepin/jc_keyboard_driver/jc_keyboard.o /home/dazhi/3399pro/rootfs_deepin/jc_keyboard_driver/jc_keyboard.mod.o
