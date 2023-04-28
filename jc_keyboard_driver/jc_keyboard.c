@@ -209,6 +209,7 @@ static void s_jc_keyboard_work_func_t(struct work_struct *work) {
 	case FRAME_CMD_TYPE_RESET:
 	case FRAME_CMD_TYPE_KEY_LED_ON:
 	case FRAME_CMD_TYPE_KEY_LED_OFF:
+
 		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
 		up(&s_jc_keyboard_info.ioctl_sem);
 		break;
@@ -403,6 +404,20 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 	case KEYBOARD_IOC_RESET:
 		keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_RESET;
 		break;
+	case KEYBOARD_IOC_KEY_LED_FLASH:   //2023-04-28
+		{
+			unsigned char user_val = 0;
+			unsigned char flashtype = 0;
+
+			if(!argv || copy_from_user(&user_val, (void *)argv, 1)) {
+				pr_err("Error KEYBOARD_IOC_KEY_LED_FLASH copy_from_user!\n");
+				return -1;
+			}
+			keyboard_send_msg.cmd = (user_val & 0x3f);	//闪烁哪个灯
+			flashtype = ((user_val >> 6) & 0x3);   //闪烁类型
+			keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_KEY_LED_FLASH | flashtype;  //发过去的命令是0x80，81，82，83
+		}
+		break;
 	case KEYBOARD_IOC_KEY_LED_ON:
 	case KEYBOARD_IOC_KEY_LED_OFF: {
 	//	int i = KEY_VALUE_FUNCTION_1;
@@ -490,7 +505,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		}
 		break;
 	case KEYBOARD_IOC_SET_BRIGHTNESS:
-	case KEYBOARD_IOC_RESET:
+	case KEYBOARD_IOC_RESET:	
 	case KEYBOARD_IOC_KEY_LED_ON:
 	case KEYBOARD_IOC_KEY_LED_OFF:   //灯的控制部分，不再等待应答，2022-09-05
 		//return 0;
@@ -500,6 +515,10 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		}
 		break;
 	default:
+		if((cmd & 0xfc) == KEYBOARD_IOC_KEY_LED_FLASH)  //闪烁的指令
+		{
+			return 0;		
+		}
 		break;
 	}
 	return 0;

@@ -72,7 +72,8 @@ enum {
 	TEST_ITEM_GET_HANDLE_INSERT_STATUS,             //42
 	TEST_ITEM_GET_LCD_MCUVERSION_STATUS, //获得LCD 屏单片机版本信息,43
 	TEST_ITEM_GET_BORAD_MCUVERSION_STATUS,  //获得导光面板按键版本信息,44
-	TEST_ITEM_GET_YT8521SH_STATUS              //45
+	TEST_ITEM_GET_YT8521SH_STATUS,              //45
+	TEST_ITEM_SET_LEDS_FLASH                   //46,增加led闪烁控制
 }; 
 
 extern int drvCoreBoardExit(void);
@@ -164,8 +165,8 @@ static void s_show_usage(void) {
 	printf("\t%2d - Get CPU temperature\n", TEST_ITEM_GET_CPU_TEMPERATURE);
 	printf("\t%2d - Get interface board temperature\n", TEST_ITEM_GET_INTERFACE_BOARD_TEMPERATURE);
 	printf("\t%2d - Set keyboard led brightness\n", TEST_ITEM_SET_KEYBOARD_LED_BRIGHTNESS);
-	printf("\t%2d - Set keyboard led on/off status\n", TEST_ITEM_SET_KEYBOARD_LED_ON_OFF);
-	printf("\t%2d - Set ALL keyboard led on/off status\n", TEST_ITEM_SET_ALLKEYBOARD_LED_ON_OFF);
+	printf("\t%2d - Set keyboard led on status\n", TEST_ITEM_SET_KEYBOARD_LED_ON_OFF);
+	printf("\t%2d - Set keyboard led off status\n", TEST_ITEM_SET_ALLKEYBOARD_LED_ON_OFF);   //2023-04-10 改了功能为熄灭某个灯
 	printf("\t%2d - Set screen brightness\n", TEST_ITEM_SET_SCREEN_BRIGHTNESS);
 	printf("\t%2d - Reset keyboard\n", TEST_ITEM_RESET_KEYBOARD);
 	printf("\t%2d - Reset screen\n", TEST_ITEM_RESET_SCREEN);
@@ -186,6 +187,7 @@ static void s_show_usage(void) {
 	printf("\t%2d - Get LCD MCU software Version\n", TEST_ITEM_GET_LCD_MCUVERSION_STATUS);
 	printf("\t%2d - Get KEYBORAD MCU software Version\n", TEST_ITEM_GET_BORAD_MCUVERSION_STATUS);
 	printf("\t%2d - HAS YT8521SH Device??\n", TEST_ITEM_GET_YT8521SH_STATUS);
+	printf("\t%2d - Set keyLights flash\n", TEST_ITEM_SET_LEDS_FLASH);
 	printf("\tOther - Exit\n");
 }
 
@@ -230,6 +232,38 @@ static void *s_watchdog_feed_thread(void *param) {
 	INFO("Stop feed watchdog!");
 	return NULL;
 }
+
+
+
+
+static int get_stdin_a_num(void)
+{
+	char buf[32];
+	int i;
+
+	while(fgets(buf,sizeof buf,stdin))
+	{
+		i = 0;
+		buf[31] = '\0';
+		while((buf[i] == ' ') || (buf[i] == '\t'))   //去除输入的空格
+			i++;
+		if(buf[i]>='0' && buf[i] <= '9')
+			return atoi(buf+i);
+		else if(buf[i] =='\n')   //对回车则继续
+			continue;
+		else   //输入了非数字开头
+			return -1;
+	}	
+	return -1;
+}
+
+
+
+
+
+
+
+
 
 int main(int args, char *argv[]) {
 	int test_item_index = -1;
@@ -414,28 +448,46 @@ int main(int args, char *argv[]) {
 			}	
 
 			KeyIndex = s_user_map_led_value[KeyIndex];  //转换一下，2023-02-22
-			
+			//printf("---drvLightLED KeyIndex = %d\n",KeyIndex);
 
 			drvLightLED(KeyIndex);
-			sleep(1);
-			drvDimLED(KeyIndex); 
-			sleep(1);
-			drvLightLED(KeyIndex);
-			sleep(1);
-			drvDimLED(KeyIndex); 			
+//			sleep(1);
+//			drvDimLED(KeyIndex); 
+//			sleep(1);
+//			drvLightLED(KeyIndex);
+//			sleep(1);
+//			drvDimLED(KeyIndex); 			
 			break;
 		}
-		case TEST_ITEM_SET_ALLKEYBOARD_LED_ON_OFF: {			
-			int i = 0;
-			drvSetLedBrt(PANEL_KEY_BRIGHTNESS_MAX);   
-			for(; i < 3; i ++) {
-			    drvLightAllLED();
-				INFO("All key LED is lighting-on!");
-				sleep(1);  /*lsr add 20220613*/
-				drvDimAllLED();
-				INFO("All key LED is lighting-off!");
-				sleep(1);  /*lsr add 20220613*/
+		case TEST_ITEM_SET_ALLKEYBOARD_LED_ON_OFF: {	//2023-04-10 改了功能为熄灭某个灯		
+			int KeyIndex = 0;
+			INFO("Please input KeyIndex: (1-43)");  //2023-01-15 1-45 by dazhi
+			if(scanf("%d", &KeyIndex) != 1) {
+				ERR("Error scanf with %d: %s", errno, strerror(errno));
+				continue;
 			}
+
+			if(KeyIndex < 1 || KeyIndex > 43)
+			{
+				ERR("Error 输入超出范围(1-43)");
+				continue;
+			}	
+
+			KeyIndex = s_user_map_led_value[KeyIndex];  //转换一下，2023-02-22
+			//printf("---drvLightLED KeyIndex = %d\n",KeyIndex);
+
+			drvDimLED(KeyIndex);
+
+//			int i = 0;
+//			drvSetLedBrt(PANEL_KEY_BRIGHTNESS_MAX);   
+//			for(; i < 3; i ++) {
+//			    drvLightAllLED();
+//				INFO("All key LED is lighting-on!");
+//				sleep(1);  /*lsr add 20220613*/
+//				drvDimAllLED();
+//				INFO("All key LED is lighting-off!");
+//				sleep(1);  /*lsr add 20220613*/
+//			}
 			break;
 		}
 		case TEST_ITEM_SET_SCREEN_BRIGHTNESS: {
@@ -583,6 +635,31 @@ int main(int args, char *argv[]) {
 			else
 			 	printf("find YT8521SH failed\n");
 		break;
+
+		case TEST_ITEM_SET_LEDS_FLASH:{
+			int KeyIndex,nBrtVal;
+			
+			INFO("Please input KeyIndex: (%u-%u)", KEY_VALUE_MIN, KEY_VALUE_MAX);
+			if((KeyIndex = get_stdin_a_num()) == -1) {//if(scanf("%d", &KeyIndex) != 1) {
+				ERR("您的输入有误，请重新输入\n");
+				continue;
+			}
+			if(KeyIndex<KEY_VALUE_MIN || KeyIndex > KEY_VALUE_MAX){
+				ERR("Error KeyIndex<KEY_VALUE_MIN || KeyIndex > KEY_VALUE_MAX");
+				continue;
+			}
+			INFO("Please input Flash_type(0:500ms,1:800ms,2:1s:3:2s): ");
+			if((nBrtVal = get_stdin_a_num()) == -1) {//if(scanf("%d", &KeyIndex) != 1) {
+				ERR("您的输入有误，请重新输入\n");
+				continue;
+			}
+
+			KeyIndex = s_user_map_led_value[KeyIndex];  //转换一下，2023-02-22
+			//printf("drvFlashLEDs KeyIndex = %d\n",KeyIndex);
+			drvFlashLEDs(KeyIndex,nBrtVal);
+		}
+		break;
+		
 		default:
 			s_main_thread_exit = true;
 			break;

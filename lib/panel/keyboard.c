@@ -70,6 +70,31 @@ static void *s_recv_event_thread(void *arg) {
 	return NULL;
 }
 
+
+
+
+static int s_ioctl_cmd(int cmd, char *val) {
+	int dev_fd = 0;
+	if(!key_inited)
+	{
+		return -1;
+	}
+	CHECK((dev_fd = open(s_keyboard_info.keyboard_dev_name, O_RDWR, 0)) > 0, -1, "Error open with %d: %s", errno, strerror(errno));
+	if(ioctl(dev_fd, cmd, val)) {
+		ERR("Error ioctl with %d: %s", errno, strerror(errno));
+		CHECK(!close(dev_fd), -1, "Error close with %d: %s", errno, strerror(errno));
+		return -1;
+	}
+	CHECK(!close(dev_fd), -1, "Error close with %d: %s", errno, strerror(errno));
+	return 0;
+}
+
+
+
+
+
+
+
 int keyboard_init(void) {
 	int input_device_num = 0;
 	memset(&s_keyboard_info, -1, sizeof(KEYBOARD_INFO_S));
@@ -80,6 +105,9 @@ int keyboard_init(void) {
 
 	snprintf(s_keyboard_info.event_dev_name, sizeof(s_keyboard_info.event_dev_name), "/dev/input/event%d", input_device_num);
 	snprintf(s_keyboard_info.keyboard_dev_name, sizeof(s_keyboard_info.keyboard_dev_name), "/dev/%s", JC_KEYBOARD_DRIVER_NAME);
+
+//	CHECK(!s_ioctl_cmd(KEYBOARD_IOC_GET_PANEL_VER, &s_keyboard_info.version), -1, "Error :getKeyboardMcuVersion:s_ioctl_cmd!");
+	
 	CHECK(!pthread_create(&s_recv_key_event_thread_id, NULL, s_recv_event_thread, NULL), -1, "Error pthread_create with %d: %s", errno, strerror(errno));
 	
 	key_inited = 1;
@@ -97,21 +125,7 @@ int keyboard_exit(void) {
 	return 0;
 }
 
-static int s_ioctl_cmd(int cmd, char *val) {
-	int dev_fd = 0;
-	if(!key_inited)
-	{
-		return -1;
-	}
-	CHECK((dev_fd = open(s_keyboard_info.keyboard_dev_name, O_RDWR, 0)) > 0, -1, "Error open with %d: %s", errno, strerror(errno));
-	if(ioctl(dev_fd, cmd, val)) {
-		ERR("Error ioctl with %d: %s", errno, strerror(errno));
-		CHECK(!close(dev_fd), -1, "Error close with %d: %s", errno, strerror(errno));
-		return -1;
-	}
-	CHECK(!close(dev_fd), -1, "Error close with %d: %s", errno, strerror(errno));
-	return 0;
-}
+
 
 
 
@@ -223,5 +237,31 @@ int getKeyboardMcuVersion(void) {
 
 	return g_mcu_version;
 }
+
+
+
+//64.键灯led闪烁接口 (nKeyIndex：1-43)
+//闪烁类型0-3（0：500ms,1:800ms,2:1s:3:2s）
+void drvFlashLEDs(int nKeyIndex,unsigned char flash_type)
+{
+	char val;
+
+	if(nKeyIndex > 43 || nKeyIndex < 1)
+	{
+		printf("error : drvFlashLEDs ,nKeyIndex = %d,out of range\n",nKeyIndex);
+		return;
+	}	
+
+	if(flash_type > 3)
+	{
+		flash_type = 0;
+	}
+	
+	val = (flash_type << 6) | (nKeyIndex & 0x3f);
+	CHECK(!s_ioctl_cmd(KEYBOARD_IOC_KEY_LED_FLASH, &val), , "Error s_ioctl_cmd!");
+
+}
+
+
 
 
