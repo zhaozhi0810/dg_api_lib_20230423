@@ -84,7 +84,7 @@
 #define MAX_ERRORS              (5)
 
 extern char md5_readBuf[64];   //´æ·ÅÎÄ¼þµÄmd5
-
+#define ApplicationAddress    0x8005c00    //对于导光按键的单片机的升级，使用不同的地址，用于区分bin文件！！！ 2023-05-08
 
 /*
 *********************************************************************************************************
@@ -350,6 +350,7 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 		}
   
 		/* µÈ´ý Ack ºÍ×Ö·û 'C' */
+		usleep(300000);  //延时一下600ms，2023-0508
 		if (UART_ReceivePacket(&receivedC[0], 2, 10000) == 0)  
 		{
 			if ((receivedC[0] == ACK)&&(receivedC[1] == CRC16))
@@ -582,9 +583,57 @@ uint8_t checksum(uint8_t *buf, uint8_t len)
 }
 
 #if 0
-void send_update_cmd_tomcu(uint8_t phase);
+void send_update_cmd_tomcu(uint8_t phase)
+{
+	uint8_t buf[] = {0xa5,74,0,0xef};   //Éý¼¶ÃüÁî
+
+	if(phase)
+	{
+		buf[2] = 1;  //确认需要下载
+		buf[3] = 0xf0;  //check sum
+	}	
+
+	UART_SendPacket(buf, 4);   //4¸ö×Ö½Ú·¢³öÈ¥
+}
+
 #else
-int  send_update_cmd_tomcu(uint8_t*data,uint8_t phase);
+
+int  send_update_cmd_tomcu(uint8_t*data,uint8_t phase)
+{
+	uint8_t buf[] = {0x55,0xaa,0xd0,0,0xcf};   //校验和不包括帧头
+	int ret;
+	int i = 0;
+	
+
+	if(phase)
+	{
+		buf[3] = 1;  //确认需要下载
+		buf[4] = 0xd0;	//check sum
+		UART_SendPacket(buf, 5);   //4¸ö×Ö½Ú·¢³öÈ¥
+	}	
+	else
+	{
+		do
+		{
+			if(i == 0)
+			{
+				UART_SendPacket(buf, 5);   //4¸ö×Ö½Ú·¢³öÈ¥
+				sleep(1);
+			}
+
+			ret = UART_ReceivePacket (data, 35, 1000);   //一次性读是正常的。
+			if(ret == 0)
+			{
+				i = 1;
+				return 0;
+			}		
+		}
+		while(1);
+	}
+
+	return 0;
+}
+
 #endif
 
 //·µ»ØÖµÎª0 ±íÊ¾ÒªÉý¼¶£¬ÆäËûÖµ²»Éý¼¶
@@ -596,83 +645,6 @@ static int ready_to_update(void)
 	int ret;
 	uint8_t i = 0;
 
-#if 0
-	// do{
-	// 	ret = UART_ReceiveByte (data, 2000);  //¶ÁÈ¡»º´æµÄ×Ö·û
-	// 	if(!ret && (data[0] == 0x43))
-	// 	{
-	// 		printf("UART_ReceiveByte 0x43\n");
-	// 		break;
-	// 	}
-	// }while(ret==0);
-	
-	//if(data[0] != 0x43)
-	{
-		printf("send_update_cmd_tomcu(0)\n");
-		do
-		{	
-			send_update_cmd_tomcu(0);		
-			do{
-				i++;
-				if(i>=10)
-				{
-					ret = -1;	
-					break;
-				}
-				ret = UART_ReceiveByte (data, 100);  //¶ÁÈ¡»º´æµÄ×Ö·û
-			}while(ret != 0 || *data != 0xa5);
-			if(ret ==0)
-			{
-				do{
-					ret = UART_ReceiveByte (data+1, 100);  //¶ÁÈ¡»º´æµÄ×Ö·û
-				}while(ret != 0);
-			}			
-			usleep(500000);
-		}		
-		while(*data != 0xa5 || *(data+1)!= 0xa5);
-		//usleep(500000);
-		ret = UART_ReceivePacket (data+2, 33, 1000);
-		if(ret == 0)
-		{
-			rsum = data[34];
-			data[34] = 0;
-			printf("Receive mcu checksum: %s\n",data+2);
-
-			// for(c=0;c<35;c++)
-			// 	printf("%x ",data[c]);
-			// printf("\n");
-
-			csum = checksum(data, 34);
-			if(csum == rsum)  //Ð£Ñé³É¹¦
-			{
-				if(memcmp(data+2,md5_readBuf,32)==0) //md5 ÊÇÏàÍ¬µÄ£¬²»Éý¼¶
-				{
-					printf("md5sum memcmp ret = 0,is the same\n");
-					printf("not need update!!!\n");
-					return 1;
-				}
-				else
-				{
-					printf("md5sum different , readyto update\n");
-					send_update_cmd_tomcu(1); //ÐèÒªÉý¼¶
-					return 0;
-				}	
-			}
-			else
-			{
-				printf("checksum error csum = %d,rsum = %d\n",csum,rsum);
-				uart_exit();
-				return -1;
-			}
-		}
-		else  //串口接收失败！！
-		{
-			printf("UART_ReceivePacket 2000 ret = %d != 0 \n",ret);
-			return -1;
-		}
-	}		
-
-#else
 	ret = send_update_cmd_tomcu(data,0);
 
 	if(ret == 0)
@@ -710,47 +682,73 @@ static int ready_to_update(void)
 		}
 	}
 
-
-
-#endif
-
 	printf("ready to update!\n");
 	return 0;
 }
 
 
-#define ApplicationAddress    0x8006000
 
-/*
-*********************************************************************************************************
-*	º¯ Êý Ãû: xymodem_send
-*	¹¦ÄÜËµÃ÷: ·¢ËÍÎÄ¼þ
-*	ÐÎ    ²Î: filename  ÎÄ¼þÃû
-*	·µ »Ø Öµ: 0  ÎÄ¼þ·¢ËÍ³É¹¦
-*********************************************************************************************************
-*/
-int xymodem_send(const char *filename)
+//成功返回buf的地址，否则返回NULL
+char* file_read_check(const char *filename,int *filesize)
 {
-    size_t len;
-    int ret, fd;
-    FILE *fin, *fout;
-    int skip_payload = 0;
-    int timeout = 0;
-	char data[2] = {0};
+	size_t len;
+    int ret;// fd;
+    FILE *fin;// *fout;
     int size = 0;
-    int bw = 0;
-    int readcount = 0, remain = 0;
-    int recv_0x43 = 0;
+    int bw = 0;       
+    int readcount = 0;
+    char filename_md5[64] = {0};
+    char md5_value[64] = {0};
+
+    len = strlen(filename);
+    if(len < 5 || len > 63)
+    {
+    	printf("ERROR: filename length = %ld <5-63>\n",len);
+    	return NULL;
+    }
+
+    strncpy(filename_md5,filename,len-3);
+    strcat(filename_md5,"md5");   //形成文件名后缀为md5。
+
+    printf("md5file_name = %s\n",filename_md5);
+    fin = fopen(filename_md5, "rb");
+    if (fin != NULL)
+    {
+        /* 文件打开成功*/
+        printf("open %s success\r\n",filename_md5);
+    }
+    else
+    {
+        printf("open %s error\r\n",filename_md5);
+        return NULL;
+    }
+
+    //md5文件的第一行必须是md5值，一次性读出32字节，否则失败
+    bw = fread(md5_value, 1, 32, fin);
+    if(bw != 32)
+    {
+    	fclose(fin);
+    	printf("ERROR: read md5_file failed ! md5_value = %s ret = %d\n",md5_value,bw);
+    	return NULL;
+    }
+    fclose(fin);
+    printf("read md5_file success! md5_value = %s\n",md5_value);
 
 	ret = get_file_md5sum(filename);
 	if(ret > 0)
 	{
 		printf("get_file_md5sum = %s,strlen = %lu\n",md5_readBuf,strlen(md5_readBuf));
+		//比较文件的md5
+		if(strcmp(md5_readBuf,md5_value))
+		{
+			printf("md5 compare failed ! please check bin file!!!!\n");
+			return NULL;
+		}
 	}
 	else
 	{
 		printf("error : get_file_md5sum \n");
-		return -1;
+		return NULL;
 	}
 
     fin = fopen(filename, "rb");
@@ -762,7 +760,7 @@ int xymodem_send(const char *filename)
     else
     {
         printf("open %s error\r\n",filename);
-        return -1;
+        return NULL;
     }
 
     fseek(fin, 0, SEEK_END);
@@ -775,9 +773,8 @@ int xymodem_send(const char *filename)
     {
     	printf("error: malloc %d\n",size);
     	fclose(fin);
-    	return -1;
+    	return NULL;
     }
-
 
     do
     {
@@ -792,23 +789,65 @@ int xymodem_send(const char *filename)
     if (((*(uint32_t*)buf) & 0xfFFE0000 ) != 0x20000000)
 	{
 		printf("image addr 0 != 0x20000000\n");
+		printf("ERROR: bad image(bin)!!!!! update cancle!!!,please check bin file!!!");
 		free(buf);
-		return -1;
+		return NULL;
 	}
-	else if(((*(uint32_t*)(buf+4)) & 0xfFFff000 ) != ApplicationAddress)
+	else if(((*(uint32_t*)(buf+4)) & 0xfFFffc00 ) != ApplicationAddress)
 	{
-		printf("image  addr 1 != ApplicationAddress\n");
+		printf("image  addr %#x != ApplicationAddress %#x\n",((*(uint32_t*)(buf+4)) & 0xfFFffc00 ),ApplicationAddress);
+		printf("ERROR: bad image(bin)!!!!! update cancle!!!,please check again!!!");
 		free(buf);
+		return NULL;
+	}
+	*filesize = size;
+	return buf;
+}
+
+
+
+
+/*
+*********************************************************************************************************
+*	º¯ Êý Ãû: xymodem_send
+*	¹¦ÄÜËµÃ÷: ·¢ËÍÎÄ¼þ
+*	ÐÎ    ²Î: filename  ÎÄ¼þÃû
+*	·µ »Ø Öµ: 0  ÎÄ¼þ·¢ËÍ³É¹¦
+*********************************************************************************************************
+*/
+int xymodem_send(const char *filename)
+{    
+	int ret;
+    int skip_payload = 0;
+    int timeout = 0;
+	char data[2] = {0};
+    int size = 0;
+
+    int recv_0x43 = 0;
+    char *buf;
+
+	buf = file_read_check(filename,&size);
+	if(buf == NULL)
+	{
+		printf("error : bin_file_read_check\n");
 		return -1;
 	}
 
 	//读取缓存中的所有数据
-
 	do
 	{
 		ret = UART_ReceiveByte (data, 500);  //
-		if(!ret && data[0] == 0x43)
-			recv_0x43 = 1;
+		if(!ret)
+		{
+			if(data[0] == 0x43)
+				recv_0x43 = 1;
+			else //读到了数据，但不是0x43，也是直接退出
+				break;
+		}
+		// else
+		// {
+		// 	break;   //没有读到数据，直接退出
+		// }			
 	}while(ret == 0);
 
 	if(!recv_0x43)  //没有收到数据，或者收到的不是0x43

@@ -16,6 +16,8 @@
 #include <linux/workqueue.h>
 #include <linux/semaphore.h>
 #include <asm/uaccess.h>
+#include <linux/moduleparam.h>
+
 
 #include "jc_keyboard.h"
 #include "jc_keyboard_cmd.h"
@@ -32,6 +34,9 @@
 
 //static int jc_keyboard_inited = -1;  //是否加载成功，2023-01-09
 
+static int debug_print = 0;   //默认不打印调试语句
+
+module_param(debug_print,int, 0644);   //加载时传递参数
 
 typedef struct {
 	int irq_gpio;
@@ -177,9 +182,18 @@ static void s_jc_keyboard_work_func_t(struct work_struct *work) {
 		return;
 	}
 	if(keyboard_recv_msg.cmd_verify != cmd_verify_tmp) {
-		pr_err("Error verify %#x\n", keyboard_recv_msg.cmd_verify);
+		if(debug_print)
+			pr_err("Error verify %#x\n", keyboard_recv_msg.cmd_verify);
 		return;
 	}
+
+	if((keyboard_recv_msg.cmd_type & 0xfc) == FRAME_CMD_TYPE_KEY_LED_FLASH)  //闪烁的指令
+	{
+		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		up(&s_jc_keyboard_info.ioctl_sem);
+		return ;		
+	}
+
 //	pr_err("2023debug s_jc_keyboard_work_func_t cmd_type = %d,cmd_key2 = %d\n",keyboard_recv_msg.cmd_type,keyboard_recv_msg.cmd_key2);
 	switch(keyboard_recv_msg.cmd_type) {
 	case FRAME_CMD_TYPE_GET_KEY_VALUE_REPLY_PRESS:
@@ -187,7 +201,8 @@ static void s_jc_keyboard_work_func_t(struct work_struct *work) {
 		if(s_jc_keyboard_info.input_dev) {
 		//	unsigned char key;
 			unsigned char key_val[3] = {keyboard_recv_msg.cmd_key0,keyboard_recv_msg.cmd_key1,keyboard_recv_msg.cmd_key2};
-			pr_info("key1 = %d key2 = %d key3 = %d\n",key_val[0],key_val[1],key_val[2]);
+			if(debug_print)
+				pr_info("key1 = %d key2 = %d key3 = %d\n",key_val[0],key_val[1],key_val[2]);
 			for(i=0;(i<3);i++)
 			//for(i=0;(i<3) && key_val[i];i++)
 			{
@@ -250,6 +265,7 @@ static int s_jc_keyboard_inttimeout_func_t(void) {
 		pr_err("Error verify %#x\n", keyboard_recv_msg.cmd_verify);
 		return -1;
 	}
+
 	switch(keyboard_recv_msg.cmd_type) {
 	case FRAME_CMD_TYPE_GET_KEY_VALUE_REPLY_PRESS:
 	case FRAME_CMD_TYPE_GET_KEY_VALUE_REPLY_RELEASE:
@@ -548,16 +564,16 @@ static int s_jc_keyboard_misc_exit(void) {
 }
 
 
-static int jc_kayboard_command_for_read(struct i2c_client *client, int rlength,
-							unsigned char *rdata)
+static int jc_kayboard_command_for_read(struct i2c_client *client)
 {
 	int ret = -1;
+	uint8_t tmpbuf[10] = {0};
 	struct i2c_msg msg[1];
 
 	msg[0].addr = client->addr;
 	msg[0].flags = I2C_M_RD;/*Read*/
-	msg[0].len = rlength;
-	msg[0].buf = rdata;
+	msg[0].len = 7;
+	msg[0].buf = tmpbuf;
 	ret = i2c_transfer(client->adapter, msg, 1);
 	return ret;
 }
@@ -566,12 +582,13 @@ static int jc_kayboard_command_for_read(struct i2c_client *client, int rlength,
 //static void s_jc_keyboard_exit(void);
 
 static int s_jc_keyboard_probe(struct i2c_client *i2c_client, const struct i2c_device_id *i2c_device_id) {
-	uint8_t tmpbuf[10] = {0};
+	
 	int ret;
 //	jc_keyboard_inited = -1;
-	pr_err("addr = %#x\n", i2c_client->addr);
+	if(debug_print)
+		pr_err("addr = %#x\n", i2c_client->addr);
 
-	ret = jc_kayboard_command_for_read(i2c_client, 2, tmpbuf);  //尝试着读一次
+	ret = jc_kayboard_command_for_read(i2c_client);  //尝试着读一次
 	if(ret < 0)  //读不了直接返回
 	{
 		pr_err("error : jc_keyboard_command_for_read,no probe\n");
@@ -657,6 +674,8 @@ module_i2c_driver(s_i2c_driver_jc_keyboard);     //2023-03-30  增加
 
 // module_init(s_jc_keyboard_init);
 // module_exit(s_jc_keyboard_exit);
-
-MODULE_AUTHOR("dazhi@jc,keyboard,2023-04");
+// date 需要修改内核的makefile ，注释 886 KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
+MODULE_DESCRIPTION("Buildtime :"__DATE__" "__TIME__);
+MODULE_AUTHOR("dazhi@jc,keyboard,2023-05");
 MODULE_LICENSE("GPL");
+MODULE_VERSION("1.1.0");    //2023-05-10 版本1.1.0

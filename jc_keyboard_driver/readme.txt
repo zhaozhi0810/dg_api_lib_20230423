@@ -13,3 +13,15 @@
 
 2023-04-27
 1.适配防爆面板
+
+
+2023-05-10
+1.控制打印信息的输出，使用debug_print参数变量，insmod jc_keyboard.ko debug_print=1 则会输出按键的打印信息
+2.增加驱动的编译时间信息，需要修改内核的makefile  注释 886 KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
+   使用modinfo 可以看到这些信息了。
+3.增加驱动的版本信息，1.1.0 ，同样在modinfo中可以看到。
+4.这些信息将用于在qt上展示版本，方便之后的升级，验证等工作。
+
+
+
+

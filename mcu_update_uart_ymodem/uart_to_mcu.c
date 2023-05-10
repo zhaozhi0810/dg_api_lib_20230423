@@ -63,7 +63,7 @@ int uart_init(int argc, char *argv[])
 {
 	int nonblock=1;   //默认改为非阻塞模式
 //	int i=0;
-	char* com_port = "/dev/ttyS0";
+	char* com_port = "/dev/ttyS4";   //导光的lcd是ttyS4，话音接口板是ttyS0
 
 	int c;
 	int baudrate = 115200;
