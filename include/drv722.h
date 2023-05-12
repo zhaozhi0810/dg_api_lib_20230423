@@ -122,5 +122,8 @@ extern void drvMuteAllMic(void);
 //闪烁类型0-3（0：500ms,1:800ms,2:1s:3:2s）
 void drvFlashLEDs(int nKeyIndex,unsigned char flash_type);
 
+//2023-05-12 获取编译时间和版本信息。
+void drvGetBuildtimeVersion(char* time32,int *version);
+
 
 #endif /* DRV722_H_ */
