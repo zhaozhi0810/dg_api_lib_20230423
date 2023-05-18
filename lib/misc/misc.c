@@ -55,7 +55,7 @@ static bool s_egn_hmic_insert = false;
 
 
 
-const char* g_build_time_str = "Buildtime :"__DATE__" "__TIME__;   //获得编译时间
+const char* g_sobuild_time_str = "Buildtime :"__DATE__" "__TIME__;   //获得编译时间
 static unsigned char g_soVersion = 10;   //1.0,2023-05-12升级1.0
 
 
@@ -369,8 +369,7 @@ bool get_handle_insert_status(void) {
 //2023-05-12 获取编译时间和版本信息。
 void drvGetBuildtimeVersion(char* time32,int *version)
 {
-
-	strcpy(time32 , g_build_time_str+11);
+	strcpy(time32 , g_sobuild_time_str+11);
 	*version = g_soVersion;
 }
 

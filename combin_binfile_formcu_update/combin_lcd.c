@@ -2,7 +2,7 @@
 * @Author: dazhi
 * @Date:   2023-05-09 09:30:03
 * @Last Modified by:   dazhi
-* @Last Modified time: 2023-05-18 09:02:29
+* @Last Modified time: 2023-05-18 11:14:15
 *
 * 如果使用md5sum的命令，则在windows下编译时，无法计算md值
 * 下载mingw64：
@@ -245,6 +245,42 @@ int get_file_md5sum(const char * filename)
 
 
 
+int write_tofile(char* filename,char* buf,int total_size)
+{
+    FILE *fin1;
+    int bw = 0;       
+    int readcount = 0;
+    int ret,i;
+
+        //生成第三个文件
+    fin1 = fopen(filename, "wb");
+    if (fin1 != NULL)
+    {
+        /* 文件打开成功*/
+        printf("3.open %s success \n",filename);
+    }
+    else
+    {
+        printf("3.open %s error \n",filename);
+    //    free(buf);
+        return -1;
+    }
+
+    //写入文件
+    readcount = 0;
+    do
+    {
+        bw = fwrite(&buf[readcount], 1, total_size, fin1);
+        readcount += bw;
+    } while (readcount < total_size);
+
+    fclose(fin1);
+
+    return 0;
+}
+
+
+
 
 
 void combin_file(char* file1,char* file2,char* outfilename)
@@ -256,49 +292,13 @@ void combin_file(char* file1,char* file2,char* outfilename)
     int bw = 0;       
     int readcount = 0;
     int ret,i;
-    int lcd_inch = 0;
+    int lcd_detect = 0;
 
     if(file1== NULL || file2 == NULL)
     {
     	printf("ERROR : file is NULL \n");
     	return ;
     }
-
-
-    //形成输出文件名
-    if(outfilename == NULL)
-    {
-    	size1 = strlen(file1)-4;
-    	if(size1 > 29)
-    		size1 = 29;
-
-    	size2 = strlen(file2)-4;
-    	if(size2 > 29)
-    		size2 = 29;
-    	strncpy(outnamebuf,file1,size1); //不需要后缀
-    	strcat(outnamebuf,"_");  //加入下划线
-    	strncat(outnamebuf,file2,size2);
-    	strcat(outnamebuf,".bin");
-    }
-    else
-    {
-    	size1 = strlen(outfilename);
-    	if(size1 > 63)  //文件名太长了
-    	{
-    		size2 = size1;
-    		size1 = 59;
-    	}	
-    	strncpy(outnamebuf,outfilename,size1);
-
-    	if(size2 > 63)
-    	{
-    		strcat(outnamebuf,".bin");
-    	}
-    }	
-    printf("outnamebuf = %s\n",outnamebuf);
-
-
-
 
     get_file_md5sum(file2);
 
@@ -474,24 +474,7 @@ void combin_file(char* file1,char* file2,char* outfilename)
     (*(uint16_t*)(buf+posision)) = 0xff;     //不需要升级
 
 
-    if(strstr(file2,"old5") != NULL)
-    {
-    //    lcd_inch = 4;  
-        (*(uint8_t*)(buf+posision-1)) = 5;
-        printf("detect old5inch\n"); 
-    }
-    else if(strstr(file2,"7inch") != NULL)
-    {
-    //     lcd_inch = 5;  
-         (*(uint8_t*)(buf+posision-1)) = 4; 
-         printf("detect 7inch\n"); 
-    }
-    else if(strstr(file2,"new5") != NULL)
-    {
-    //    lcd_inch = 6;
-        (*(uint8_t*)(buf+posision-1)) = 6; 
-        printf("detect new5inch\n"); 
-    }
+
 
 
     posision += 512;   //写入md5的值。
@@ -504,32 +487,89 @@ void combin_file(char* file1,char* file2,char* outfilename)
     fclose(fin1);
     fclose(fin2);
 
-    //生成第三个文件
-    fin1 = fopen(outnamebuf, "wb");
-    if (fin1 != NULL)
+
+    if(strstr(file2,"lcd") != NULL)
     {
-        /* 文件打开成功*/
-        printf("3.open %s success \n",outnamebuf);
+    //    lcd_inch = 4; 
+        lcd_detect = 1;   //需要生成3个文件
+        //(*(uint8_t*)(buf+posision-1)) = 5;
+    }
+
+    //形成输出文件名
+    if(outfilename == NULL)
+    {
+        size2 = strlen(file2)-4;
+        if(size2 > 59)
+            size2 = 59;
+
+        strncat(outnamebuf,file2,size2);  //拷贝的时候不包括.bin
     }
     else
     {
-        printf("3.open %s error \n",outnamebuf);
-        free(buf);
-        return ;
+        size1 = strlen(outfilename);
+        size2 = size1;
+        if(size1 > 63)  //文件名太长了
+        {
+            
+            size1 = 59;
+        }
+        else if(lcd_detect)
+              size1 -= 4;
+
+
+        strncpy(outnamebuf,outfilename,size1);
+
+        if(!lcd_detect && size2 > 63)
+        {
+            strcat(outnamebuf,".bin");
+        }
+    }   
+    printf("outnamebuf = %s\n",outnamebuf);
+
+
+    if(lcd_detect)
+    {
+        strcat(outnamebuf,"-old5.bin");
+        (*(uint8_t*)(buf+posision-513)) = 5;
+        write_tofile(outnamebuf,buf,total_size);
+        outnamebuf[strlen(outnamebuf)-9] = '\0';
+        (*(uint8_t*)(buf+posision-513)) = 6;
+        strcat(outnamebuf,"-new5.bin");
+        write_tofile(outnamebuf,buf,total_size);
+        outnamebuf[strlen(outnamebuf)-9] = '\0';
+        (*(uint8_t*)(buf+posision-513)) = 4;
+        strcat(outnamebuf,"-7inc.bin");
+        write_tofile(outnamebuf,buf,total_size);
+    }
+    else
+    {
+        write_tofile(outnamebuf,buf,total_size);
+
+     //    //生成第三个文件
+     //    fin1 = fopen(outnamebuf, "wb");
+     //    if (fin1 != NULL)
+     //    {
+     //        /* 文件打开成功*/
+     //        printf("3.open %s success \n",outnamebuf);
+     //    }
+     //    else
+     //    {
+     //        printf("3.open %s error \n",outnamebuf);
+     //        free(buf);
+     //        return ;
+     //    }
+
+     //    //写入文件
+     //    readcount = 0;
+    	// do
+     //    {
+     //        bw = fwrite(&buf[readcount], 1, total_size, fin1);
+     //        readcount += bw;
+     //    } while (readcount < total_size);
+
+     //    fclose(fin1);
     }
 
-
-
-
-    //写入文件
-    readcount = 0;
-	do
-    {
-        bw = fwrite(&buf[readcount], 1, total_size, fin1);
-        readcount += bw;
-    } while (readcount < total_size);
-
-    fclose(fin1);
     free(buf);
 
     //生成md5文件
