@@ -429,7 +429,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 				pr_err("Error KEYBOARD_IOC_KEY_LED_FLASH copy_from_user!\n");
 				return -1;
 			}
-			keyboard_send_msg.cmd = (user_val & 0x3f);	//闪烁哪个灯
+			keyboard_send_msg.cmd = s_user_map_led_value[user_val & 0x3f];//(user_val & 0x3f);	//闪烁哪个灯
 			flashtype = ((user_val >> 6) & 0x3);   //闪烁类型
 			keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_KEY_LED_FLASH | flashtype;  //发过去的命令是0x80，81，82，83
 		}
