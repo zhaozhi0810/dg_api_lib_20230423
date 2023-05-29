@@ -74,4 +74,23 @@
 #define FRAME_CMD_TYPE_SET_BRIGHTNESS_MAX	(100)
 #endif
 
+
+
+#define BRIGHTNESS_RESPONSE_BIT 1   //获取亮度的响应位bit1
+#define PANEL_MODEL_RESPONSE_BIT 2   //键盘类型的响应位bit2
+#define PANEL_VER_RESPONSE_BIT 3   //键盘版本的响应位bit3
+#define SET_BRIGHTNESS_RESPONSE_BIT 4   //设置亮度的响应位bit4
+#define RESET_RESPONSE_BIT 5   //复位的响应位bit5
+#define KEY_LED_ON_RESPONSE_BIT 6   //键灯点亮的响应位bit6
+#define KEY_LED_OFF_RESPONSE_BIT 7   //键灯熄灭的响应位bit7
+#define KEY_VALUE_REPLY_PRESS_RESPONSE_BIT 8   //xxx,按键按下的响应位bit8，这个不需要等响应，这个是主动读
+#define KEY_VALUE_REPLY_RELEASE_RESPONSE_BIT 9   //xxx,按键松开的响应位bit9，这个不需要等响应，这个是主动读
+#define KEY_LED_FLASH_RESPONSE_BIT 10   //闪烁键灯接口的响应位bit10
+
+
+
+
+
+
+
 #endif /* KEYBOARD_KEYUSER_H_ */

@@ -192,12 +192,26 @@ void drvSetLedBrt(int nBrtVal) {
 
 void drvLightLED(int nKeyIndex) {
 	char val = nKeyIndex;
-	CHECK(!s_ioctl_cmd(KEYBOARD_IOC_KEY_LED_ON, &val), , "Error s_ioctl_cmd!");
+	//CHECK(!s_ioctl_cmd(KEYBOARD_IOC_KEY_LED_ON, &val), , "Error s_ioctl_cmd!");
+	int ret;
+	ret = s_ioctl_cmd(KEYBOARD_IOC_KEY_LED_ON, &val);
+	if(ret)
+	{
+		printf("2023-0529-drvLightLED api error:  ret = %d\n",ret);
+	}
 }
 
 void drvDimLED(int nKeyIndex) {
 	char val = nKeyIndex;
-	CHECK(!s_ioctl_cmd(KEYBOARD_IOC_KEY_LED_OFF, &val), , "Error s_ioctl_cmd!");
+	//CHECK(!s_ioctl_cmd(KEYBOARD_IOC_KEY_LED_OFF, &val), , "Error s_ioctl_cmd!");
+	int ret;
+	ret = s_ioctl_cmd(KEYBOARD_IOC_KEY_LED_OFF, &val);
+	if(ret)
+	{
+		printf("2023-0529-drvDimLED api error:  ret = %d\n",ret);
+	}
+
+	
 }
 
 /*lsr modify 20220505 non*/

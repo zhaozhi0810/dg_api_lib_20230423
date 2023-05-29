@@ -30,11 +30,21 @@
 #define JC_KEYBOARD_I2C_TIMEOUT		(4000)	//4000 --> 1s  2022-09-06 dazhi修改，客户处调试暂时已通过。
 
 #define NO_POLL_MODE   //不主动查询，需要单片机给出中断才行。
-
+#define USE_SELF_WORK_QUEUE 
 
 //static int jc_keyboard_inited = -1;  //是否加载成功，2023-01-09
 
+#ifdef USE_SELF_WORK_QUEUE
+//分配工作队列的指针
+static struct workqueue_struct *jc_keyboard_wq;
+#endif
+
 static int debug_print = 0;   //默认不打印调试语句
+
+static struct mutex iic_Mutex;      //互斥锁
+static struct mutex iic_idel_Mutex;      //iic空闲互斥锁
+static volatile unsigned long wait_respon_bits = 0; //需要等待什么应答，每一个位对应一种需求
+
 
 module_param(debug_print,int, 0644);   //加载时传递参数
 
@@ -141,7 +151,7 @@ static const unsigned char s_user_map_led_value[] = {
 		[33] = 0x23	, //右			//KC_FIGHT  33
 		[34] = 0x24	, //OK			//KC_OK     34
 		[15] = 0x25	, //保持			//KC_HOLD   15
-		[16] = 0x26	, //设置/摘挂机			//KC_RECOV  16
+		[43] = 0x26	, //设置/摘挂机		//KC_RECOV  16改成43 原来[16] = 0x26	,
 		[42] = 0x27	, //测试/复位		//KC_xxx	
 		[37] = 0x28	, //指示灯-红		//LED_RED  37	
 		[38] = 0x29	, //指示灯-绿		//LED_GREEN 38	
@@ -165,10 +175,23 @@ static void s_jc_keyboard_work_func_t(struct work_struct *work) {
 	unsigned char cmd_verify_tmp = 0;
 //	pr_err("2023debug s_jc_keyboard_work_func_t\n");
 	memset(&keyboard_recv_msg, 0, sizeof(KEYBOARD_I2C_RECV_MSG_S));
+	mutex_lock(&iic_Mutex);  //加锁
 	if(i2c_master_recv(s_jc_keyboard_info.i2c_client, (char *)&keyboard_recv_msg, sizeof(KEYBOARD_I2C_RECV_MSG_S)) != sizeof(KEYBOARD_I2C_RECV_MSG_S)) {
 		pr_err("Error i2c_master_recv, addr = %#x\n", s_jc_keyboard_info.i2c_client->addr);
+		mutex_unlock(&iic_Mutex);  //开锁
 		return;
 	}
+	mutex_unlock(&iic_Mutex);  //开锁
+
+	if(debug_print)
+		pr_err("i2c_master_recv: h0 = %#x, h1 = %#x type = %#x, key0=%#x, key1=%#x，key2=%#x,verify=%#x\n",
+			keyboard_recv_msg.cmd_header0,
+			keyboard_recv_msg.cmd_header1,
+			keyboard_recv_msg.cmd_type,
+			keyboard_recv_msg.cmd_key0,
+			keyboard_recv_msg.cmd_key1,
+			keyboard_recv_msg.cmd_key2,
+			keyboard_recv_msg.cmd_verify);
 
 	cmd_verify_tmp = FRAME_VERIFY(
 			keyboard_recv_msg.cmd_header0,
@@ -190,6 +213,7 @@ static void s_jc_keyboard_work_func_t(struct work_struct *work) {
 	if((keyboard_recv_msg.cmd_type & 0xfc) == FRAME_CMD_TYPE_KEY_LED_FLASH)  //闪烁的指令
 	{
 		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(KEY_LED_FLASH_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		up(&s_jc_keyboard_info.ioctl_sem);
 		return ;		
 	}
@@ -218,14 +242,38 @@ static void s_jc_keyboard_work_func_t(struct work_struct *work) {
 		}
 		break;
 	case FRAME_CMD_TYPE_GET_BRIGHTNESS:
-	case FRAME_CMD_TYPE_GET_PANEL_MODEL:
-	case FRAME_CMD_TYPE_GET_PANEL_VER:
-	case FRAME_CMD_TYPE_SET_BRIGHTNESS:
-	case FRAME_CMD_TYPE_RESET:
-	case FRAME_CMD_TYPE_KEY_LED_ON:
-	case FRAME_CMD_TYPE_KEY_LED_OFF:
-
 		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		up(&s_jc_keyboard_info.ioctl_sem);
+		break;
+	case FRAME_CMD_TYPE_GET_PANEL_MODEL:
+		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		up(&s_jc_keyboard_info.ioctl_sem);
+		break;
+	case FRAME_CMD_TYPE_GET_PANEL_VER:
+		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		up(&s_jc_keyboard_info.ioctl_sem);
+		break;
+	case FRAME_CMD_TYPE_SET_BRIGHTNESS:
+		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		up(&s_jc_keyboard_info.ioctl_sem);
+		break;
+	case FRAME_CMD_TYPE_RESET:
+		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(RESET_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		up(&s_jc_keyboard_info.ioctl_sem);
+		break;
+	case FRAME_CMD_TYPE_KEY_LED_ON:
+		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(KEY_LED_ON_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		up(&s_jc_keyboard_info.ioctl_sem);
+		break;
+	case FRAME_CMD_TYPE_KEY_LED_OFF:
+		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
+		clear_bit(KEY_LED_OFF_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
 		up(&s_jc_keyboard_info.ioctl_sem);
 		break;
 	default:
@@ -245,10 +293,13 @@ static int s_jc_keyboard_inttimeout_func_t(void) {
 	// 	return -1;
 //	pr_err("2023debug s_jc_keyboard_inttimeout_func_t\n");
 	memset(&keyboard_recv_msg, 0, sizeof(KEYBOARD_I2C_RECV_MSG_S));
+	mutex_lock(&iic_Mutex);  //加锁
 	if(i2c_master_recv(s_jc_keyboard_info.i2c_client, (char *)&keyboard_recv_msg, sizeof(KEYBOARD_I2C_RECV_MSG_S)) != sizeof(KEYBOARD_I2C_RECV_MSG_S)) {
 		pr_err("Error i2c_master_recv, addr = %#x\n", s_jc_keyboard_info.i2c_client->addr);
+		mutex_unlock(&iic_Mutex);  //开锁
 		return -1;
 	}
+	mutex_unlock(&iic_Mutex);  //开锁
 
 	cmd_verify_tmp = FRAME_VERIFY(
 			keyboard_recv_msg.cmd_header0,
@@ -304,9 +355,19 @@ static irqreturn_t s_jc_keyboard_i2c_isr(int irq, void *dev_id)
 	if(irq != s_jc_keyboard_info.i2c_client->irq) {
 		return IRQ_NONE;
 	}
+	if(debug_print)
+		pr_err("enter jc_keyboard_i2c_isr\n");
+
+#ifdef USE_SELF_WORK_QUEUE
+	//将自己的工作和自己的工作队列进行管理，然后再登记
+    if(!queue_work(jc_keyboard_wq, &jc_keyboard_work)) {
+		pr_err("Error queue_work 2023!\n");
+	}
+#else
 	if(!schedule_work(&jc_keyboard_work)) {
 		pr_err("Error schedule_work!\n");
 	}
+#endif	
 	return IRQ_HANDLED;
 }
 
@@ -329,6 +390,11 @@ static int s_jc_keyboard_irq_init(void) {
 		return -1;
 	}
 	INIT_WORK(&jc_keyboard_work, s_jc_keyboard_work_func_t);
+
+#ifdef USE_SELF_WORK_QUEUE
+	//创建自己的工作队列和自己的内核线程
+    jc_keyboard_wq = create_workqueue("myjc_keyboard_wq");
+#endif
 	if(request_irq(s_jc_keyboard_info.i2c_client->irq, s_jc_keyboard_i2c_isr, IRQF_TRIGGER_FALLING, JC_KEYBOARD_IRQ_NAME, NULL)) {
 		pr_err("Error request_irq!\n");
 		gpio_free(s_jc_keyboard_info.irq_gpio);
@@ -344,6 +410,11 @@ static int s_jc_keyboard_irq_exit(void) {
 	if(s_jc_keyboard_info.irq_gpio > 0) {
 		gpio_free(s_jc_keyboard_info.irq_gpio);
 	}
+
+#ifdef USE_SELF_WORK_QUEUE
+	//销毁自己的工作队列和内核线程
+    destroy_workqueue(jc_keyboard_wq);
+#endif
 	return 0;
 }
 
@@ -384,7 +455,8 @@ static int s_jc_keyboard_input_exit(void) {
 
 static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long argv) {
 	KEYBOARD_I2C_SEND_MSG_S keyboard_send_msg;
-
+	if(debug_print)
+		pr_err("enter jc_keyboard_unlocked_ioctl\n");
 	// if(jc_keyboard_inited != 1)  //驱动没有加载成功！！
 	// 	return -1;
 
@@ -399,26 +471,31 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 	switch(cmd) {
 	case KEYBOARD_IOC_GET_BRIGHTNESS:
 		keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_GET_BRIGHTNESS;
+		set_bit(BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		break;
 	case KEYBOARD_IOC_SET_BRIGHTNESS:
 		if(!argv || copy_from_user(&keyboard_send_msg.cmd, (void *)argv, 1)) {
 			pr_err("Error copy_from_user!\n");
-			return -1;
+			return -2;
 		}
 		if(keyboard_send_msg.cmd < FRAME_CMD_TYPE_SET_BRIGHTNESS_MIN || keyboard_send_msg.cmd > FRAME_CMD_TYPE_SET_BRIGHTNESS_MAX) {
 			pr_err("Error brightness out of range!\n");
-			return -1;
+			return -3;
 		}
 		keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_SET_BRIGHTNESS;
+		set_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		break;
 	case KEYBOARD_IOC_GET_PANEL_MODEL:
 		keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_GET_PANEL_MODEL;
+		set_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		break;
 	case KEYBOARD_IOC_GET_PANEL_VER:
 		keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_GET_PANEL_VER;
+		set_bit(PANEL_VER_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		break;
 	case KEYBOARD_IOC_RESET:
 		keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_RESET;
+		set_bit(RESET_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		break;
 	case KEYBOARD_IOC_KEY_LED_FLASH:   //2023-04-28
 		{
@@ -427,12 +504,13 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 
 			if(!argv || copy_from_user(&user_val, (void *)argv, 1)) {
 				pr_err("Error KEYBOARD_IOC_KEY_LED_FLASH copy_from_user!\n");
-				return -1;
+				return -4;
 			}
 			keyboard_send_msg.cmd = s_user_map_led_value[user_val & 0x3f];//(user_val & 0x3f);	//闪烁哪个灯
 			flashtype = ((user_val >> 6) & 0x3);   //闪烁类型
 			keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_KEY_LED_FLASH | flashtype;  //发过去的命令是0x80，81，82，83
 		}
+		set_bit(KEY_LED_FLASH_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		break;
 	case KEYBOARD_IOC_KEY_LED_ON:
 	case KEYBOARD_IOC_KEY_LED_OFF: {
@@ -440,7 +518,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		unsigned char user_key_code = 0;
 		if(!argv || copy_from_user(&user_key_code, (void *)argv, 1)) {
 			pr_err("Error copy_from_user!\n");
-			return -1;
+			return -5;
 		}
 		// for(; i < KEY_VALUE_TEST; i ++) {
 		// 	if(s_user_key_value[i] == user_key_code) {
@@ -455,8 +533,8 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 
 		//2023-01-05  不能识别的按键
 		if(keyboard_send_msg.cmd == 0){
-			pr_err("Error keyboard_send_msg.cmd == 0!\n");
-			return -1;
+			pr_err("Error keyboard_send_msg.cmd == 0! user_key_code = %d\n",user_key_code);
+			return -6;
 		}
 
 		// if(i >= KEY_VALUE_TEST) {
@@ -470,15 +548,17 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		// }
 		if(cmd == KEYBOARD_IOC_KEY_LED_ON) {
 			keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_KEY_LED_ON;
+			set_bit(KEY_LED_ON_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		}
 		else {
 			keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_KEY_LED_OFF;
+			set_bit(KEY_LED_OFF_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
 		}
 		break;
 	}
 	default:
 		pr_err("Error non-supported cmd %d\n", cmd);
-		return -1;
+		return -7;
 	}
 	keyboard_send_msg.cmd_verify = FRAME_VERIFY(
 			keyboard_send_msg.cmd_header0,
@@ -487,19 +567,24 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 			keyboard_send_msg.cmd,
 			0,
 			0);
-#if 0
-	pr_err("i2c_master_send: h0 = %#x, h1 = %#x type = %#x, %#x, %#x\n",
+#if 1
+	if(debug_print)
+		pr_err("i2c_master_send: h0 = %#x, h1 = %#x type = %#x, %#x, %#x\n",
 			keyboard_send_msg.cmd_header0,
 			keyboard_send_msg.cmd_header1,
 			keyboard_send_msg.cmd_type,
 			keyboard_send_msg.cmd,
 			keyboard_send_msg.cmd_verify);
 #endif
+	mutex_lock(&iic_idel_Mutex);   //不让发
+	mutex_lock(&iic_Mutex);  //加锁
 	if(i2c_master_send(s_jc_keyboard_info.i2c_client, (char *)&keyboard_send_msg, sizeof(KEYBOARD_I2C_SEND_MSG_S)) != sizeof(KEYBOARD_I2C_SEND_MSG_S)) {
 		pr_err("Error i2c_master_send!\n");
-		return -1;
+		mutex_unlock(&iic_Mutex);  //开锁
+		mutex_unlock(&iic_idel_Mutex);  //开锁
+		return -8;
 	}
-
+	mutex_unlock(&iic_Mutex);//开锁
 	if(down_timeout(&s_jc_keyboard_info.ioctl_sem, JC_KEYBOARD_I2C_TIMEOUT/4)) {
 		//没有中断的情况会超时
 #ifndef NO_POLL_MODE
@@ -507,32 +592,108 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 #endif
 		{
 			pr_err("Error down_timeout!\n");
-			return -1;
+			mutex_unlock(&iic_idel_Mutex);  //开锁
+			return -9;
 		}
 	}
-	
+	mutex_unlock(&iic_idel_Mutex);  //开锁
+
+
+
 	switch(cmd) {
 	case KEYBOARD_IOC_GET_BRIGHTNESS:
-	case KEYBOARD_IOC_GET_PANEL_MODEL:
-	case KEYBOARD_IOC_GET_PANEL_VER:
+		if(test_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits))
+		{
+			pr_err("Error KEYBOARD_IOC_GET_BRIGHTNESS down_timeout! ----test_bit\n");
+			clear_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);
+			return -20;
+		}
 		if(!argv || copy_to_user((void *)argv, &s_i2c_reply_ret, 1)) {
 			pr_err("Error copy_to_user!\n");
-			return -1;
+			return -10;
+		}
+		break;
+	case KEYBOARD_IOC_GET_PANEL_MODEL:
+		if(test_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits))
+		{
+			pr_err("Error KEYBOARD_IOC_GET_PANEL_MODEL down_timeout! ----test_bit\n");
+			clear_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);
+			return -21;
+		}
+		if(!argv || copy_to_user((void *)argv, &s_i2c_reply_ret, 1)) {
+			pr_err("Error copy_to_user!\n");
+			return -10;
+		}
+		break;
+	case KEYBOARD_IOC_GET_PANEL_VER:
+		if(test_bit(PANEL_VER_RESPONSE_BIT, &wait_respon_bits))
+		{
+			pr_err("Error KEYBOARD_IOC_GET_PANEL_VER down_timeout! ----test_bit\n");
+			clear_bit(PANEL_VER_RESPONSE_BIT, &wait_respon_bits);
+			return -22;
+		}
+		if(!argv || copy_to_user((void *)argv, &s_i2c_reply_ret, 1)) {
+			pr_err("Error copy_to_user!\n");
+			return -10;
 		}
 		break;
 	case KEYBOARD_IOC_SET_BRIGHTNESS:
-	case KEYBOARD_IOC_RESET:	
-	case KEYBOARD_IOC_KEY_LED_ON:
-	case KEYBOARD_IOC_KEY_LED_OFF:   //灯的控制部分，不再等待应答，2022-09-05
-		//return 0;
+		if(test_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits))
+		{
+			pr_err("Error KEYBOARD_IOC_SET_BRIGHTNESS down_timeout! ----test_bit\n");
+			clear_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);
+			return -23;
+		}
 		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
 			pr_err("Error execute failed!\n");
-			return -1;
+			return -11;
+		}
+		break;
+	case KEYBOARD_IOC_RESET:
+		if(test_bit(RESET_RESPONSE_BIT, &wait_respon_bits))
+		{
+			pr_err("Error KEYBOARD_IOC_RESET down_timeout! ----test_bit\n");
+			clear_bit(RESET_RESPONSE_BIT, &wait_respon_bits);
+			return -24;
+		}
+		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
+			pr_err("Error execute failed!\n");
+			return -11;
+		}
+		break;	
+	case KEYBOARD_IOC_KEY_LED_ON:
+		if(test_bit(KEY_LED_ON_RESPONSE_BIT, &wait_respon_bits))
+		{
+			pr_err("Error KEYBOARD_IOC_KEY_LED_ON down_timeout! ----test_bit\n");
+			clear_bit(KEY_LED_ON_RESPONSE_BIT, &wait_respon_bits);
+			return -25;
+		}
+		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
+			pr_err("Error execute failed!\n");
+			return -11;
+		}
+		break;
+	case KEYBOARD_IOC_KEY_LED_OFF:   //灯的控制部分，不再等待应答，2022-09-05		
+		if(test_bit(KEY_LED_OFF_RESPONSE_BIT, &wait_respon_bits))
+		{
+			pr_err("Error KEYBOARD_IOC_KEY_LED_OFF down_timeout! ----test_bit\n");
+			clear_bit(KEY_LED_OFF_RESPONSE_BIT, &wait_respon_bits);
+			return -26;
+		}//return 0;
+		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
+			pr_err("Error execute failed!\n");
+			return -11;
 		}
 		break;
 	default:
 		if((cmd & 0xfc) == KEYBOARD_IOC_KEY_LED_FLASH)  //闪烁的指令
 		{
+			if(test_bit(KEY_LED_FLASH_RESPONSE_BIT, &wait_respon_bits))
+			{
+				pr_err("Error KEYBOARD_IOC_KEY_LED_FLASH down_timeout! ----test_bit\n");
+				clear_bit(KEY_LED_FLASH_RESPONSE_BIT, &wait_respon_bits);
+				return -27;
+			}
 			return 0;		
 		}
 		break;
@@ -623,7 +784,9 @@ static int s_jc_keyboard_probe(struct i2c_client *i2c_client, const struct i2c_d
 		s_jc_keyboard_input_exit();
 		return -1;
 	}
-
+	
+	 mutex_init(&iic_Mutex);  //初始化互斥锁
+	 mutex_init(&iic_idel_Mutex);
 //	jc_keyboard_inited = 1;  //加载成功！！
 	return 0;
 }
