@@ -783,7 +783,7 @@ int  send_update_cmd_tomcu(uint8_t*data,uint8_t phase)
 	uint8_t buf[] = {0x55,0xaa,0xd0,0,0xcf};   //校验和不包括帧头
 	int ret;
 	int i = 0;
-	
+	int retry_times = 5;
 
 	if(phase)
 	{
@@ -806,9 +806,14 @@ int  send_update_cmd_tomcu(uint8_t*data,uint8_t phase)
 			{
 				i = 1;
 				return 0;
-			}		
+			}
+			else
+				retry_times--; 		
 		}
-		while(1);
+		while(retry_times);
+
+		if(!retry_times)
+			return -1;
 	}
 
 	return 0;
@@ -850,8 +855,8 @@ static int ready_to_update(void)
 			else
 			{
 				printf("md5sum different , readyto update\n");
-				send_update_cmd_tomcu(NULL,1); //ÐèÒªÉý¼¶
-				return 0;
+				return send_update_cmd_tomcu(NULL,1); //ÐèÒªÉý¼¶
+				//return 0;
 			}	
 		}
 		else
@@ -861,6 +866,8 @@ static int ready_to_update(void)
 			return -1;
 		}
 	}
+	else
+		return -1;
 
 	printf("ready to update!\n");
 	return 0;
@@ -888,6 +895,7 @@ char* file_read_check(const char *filename,int *filesize)
     	return NULL;
     }
 
+#if 0
     strncpy(filename_md5,filename,len-3);
     strcat(filename_md5,"md5");   //形成文件名后缀为md5。
 
@@ -914,7 +922,7 @@ char* file_read_check(const char *filename,int *filesize)
     }
     fclose(fin);
     printf("read md5_file success! md5_value = %s\n",md5_value);
-
+#endif
 	// ret = get_file_md5sum(filename);
 	// if(ret > 0)
 	// {
@@ -947,6 +955,20 @@ char* file_read_check(const char *filename,int *filesize)
     file_offset = ApplicationAddress & 0x7f00;  //iap的偏移全部去掉
     fseek(fin, 0, SEEK_END);
     size = ftell(fin);
+
+
+        //从bin文件读取md5值
+    fseek(fin, file_offset-512, SEEK_SET);   //从bing文件读出md5,
+    bw = fread(md5_value, 1, 32, fin);
+    if(bw != 32)
+    {
+    	fclose(fin);
+    	printf("ERROR: read bin md5 failed ! ret = %d\n",bw);
+    	return NULL;
+    }
+    printf("read bin md5 success! md5_value = %s\n",md5_value);
+
+
     fseek(fin, file_offset, SEEK_SET);   //读取的位置也是不从0开始
     size -= (file_offset);  //去掉偏移的字节
     printf("file size = %d\r\n", size);
@@ -1088,7 +1110,9 @@ int xymodem_send(const char *filename)
 
 	}
 	else
+	{
 		printf("recive 0x43 ----1\n");
+	}	
 
 	printf("go to update now!!!\n");	
 

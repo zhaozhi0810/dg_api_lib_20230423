@@ -139,8 +139,9 @@ int IIC3_0x40_ReceiveByte (uint8_t *c, uint32_t timeout)
         }    
         else
         {
-            usleep(1000);  //1ms
-            timeout --;
+            //usleep(1000);  //1ms
+            //timeout --;
+	    break;   //2023-06-26
         }   
     }
     while(timeout);
@@ -168,8 +169,9 @@ int IIC3_0x40_ReceivePacket (uint8_t *data, uint16_t length, uint32_t timeout)
         }
         else
         {
-            usleep(1000);  //1ms
-            timeout --;
+            //usleep(1000);  //1ms
+            //timeout --;
+	    break;   //2023-06-26
         }   
     }
     while(timeout);

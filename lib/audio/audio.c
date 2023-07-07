@@ -239,15 +239,17 @@ void drvSubSpeakVolume(int value) {
 }
 /*lsr add 20220505*/
 void drvSetSpeakVolume(int value){
-		CHECK(value > 0 && value <= 100, , "Error value out of range!");
+	CHECK(value >= 0 && value <= 100, , "Error value out of range!");
 	unsigned char val = 0;
 //	unsigned char val_max = 0x21;
 //	unsigned char val_step = val_max*value/100;
 //
 //	val = val_step;
 //	val = (val < 0)? 0:val;
-
-	val = 13*(value)/100 + 20;    //2023-04-12 修改音量曲线
+	if(value)
+		val = 13*(value)/100 + 20;    //2023-04-12 修改音量曲线
+	else
+		val = 0;   //2023-06-07 保留0值
 	CHECK(!s_write_reg(ES8388_DACCONTROL26, val), , "Error s_write_reg!");
 
 }
@@ -277,14 +279,17 @@ void drvSubHandVolume(int value) {
 
 /*lsr add 20220505*/
 void drvSetHandVolume(int value) {
-	CHECK(value > 0 && value <= 100, , "Error value out of range!");
+	CHECK(value >= 0 && value <= 100, , "Error value out of range!");
 	unsigned char val = 0;
 //	unsigned char val_max = 0x21;
 //	unsigned char val_step = val_max*value/100;
 //
 //	val = val_step;
 //	val = (val < 0)? 0:val;
-	val = 13*(value)/100 + 20;    //2023-04-12 修改音量曲线
+	if(value)
+		val = 13*(value)/100 + 20;    //2023-04-12 修改音量曲线
+	else
+		val = 0;   //2023-06-07 保留0值
 	CHECK(!s_write_reg(ES8388_DACCONTROL25, val), , "Error s_write_reg!");
 }
 
@@ -315,16 +320,20 @@ void drvSubEarphVolume(int value) {
 
 /*lsr add 20220505*/
 void drvSetEarphVolume(int value) {
-	CHECK(value > 0 && value <= 100, , "Error value out of range!");
+	CHECK(value >= 0 && value <= 100, , "Error value out of range!");
 	unsigned char val = 0;
 //	unsigned char val_max = 0x21;
 //	unsigned char val_step = val_max*value/100;
 //
 //	val = val_step;
 //	val = (val < 0)? 0:val;
-	val = 13*(value)/100 + 20;    //2023-04-12 修改音量曲线
+	if(value)
+		val = 13*(value)/100 + 20;    //2023-04-12 修改音量曲线
+	else
+		val = 0;   //2023-06-07 保留0值
 
 	CHECK(!s_write_reg(ES8388_DACCONTROL27, val), , "Error s_write_reg!");
+	CHECK(!s_write_reg(ES8388_DACCONTROL24, val), , "Error s_write_reg!");
 }
 
 void drvEnableHandout(void) {
