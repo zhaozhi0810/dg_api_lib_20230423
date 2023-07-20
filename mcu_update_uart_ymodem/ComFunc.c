@@ -21,7 +21,7 @@
 #define bzero(a, b)             memset(a, 0, b)
 
 //static pthread_mutex_t uart_write_mutex=PTHREAD_MUTEX_INITIALIZER;
-
+extern int g_debug_mode;   //调试模式，用于输出一些打印信息，0表示不输出打印信息
 /*******************************************
  *	波特率转换函数（请确认是否正确）
 ********************************************/
@@ -204,7 +204,8 @@ int PortOpen( char *devName,int arg_nonblock)
 	if(arg_nonblock)
 	{
 		args |=  O_NDELAY;
-		printf("PortOpen arg_nonblock\n");
+		if(g_debug_mode)  //调试模式下才打印
+			printf("PortOpen arg_nonblock\n");
 	}
 
 	//fdcom = open(devName, O_RDWR | O_NOCTTY | O_NONBLOCK | O_NDELAY);
@@ -316,7 +317,7 @@ int PortRecv(int fdcom, unsigned char *data, uint16_t  datalen,unsigned int time
 				// printf("\n");	
             }
         }               
-		else
+		else if(g_debug_mode)  //调试模式下才打印
 		   printf("No data within %d seconds.\n",time_out);														
 	}while(retry --);	//一次只能读到32个字节，看情况定吧
 	

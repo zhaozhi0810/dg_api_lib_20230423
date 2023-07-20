@@ -2,7 +2,7 @@
  * jc_keyboard.c
  *
  *  Created on: Dec 25, 2021
- *      Author: zlf
+ *      Author: dazhi
  */
 
 #include <linux/module.h>
@@ -111,7 +111,7 @@ static const unsigned char s_user_key_value[] = {
 };
 
 
-//左侧（中括号中的数）是722自动自定义的键值 比如KC_L1 --> 1
+//左侧（中括号中的数）是客户自动自定义的键值 比如KC_L1 --> 1
 //右侧是s_user_key_value中对应值得索引号，比如数字0，在数组中排13，就是0xd，
 static const unsigned char s_user_map_led_value[] = {
 		[1] = 0x01	, //图示1左1	     //KC_L1   1
@@ -253,12 +253,12 @@ static void s_jc_keyboard_work_func_t(struct work_struct *work) {
 		break;
 	case FRAME_CMD_TYPE_GET_PANEL_VER:
 		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
-		clear_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		clear_bit(PANEL_VER_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
 		up(&s_jc_keyboard_info.ioctl_sem);
 		break;
 	case FRAME_CMD_TYPE_SET_BRIGHTNESS:
 		s_i2c_reply_ret = keyboard_recv_msg.cmd_key2;
-		clear_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
+		clear_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);   //清零某一位
 		up(&s_jc_keyboard_info.ioctl_sem);
 		break;
 	case FRAME_CMD_TYPE_RESET:
@@ -476,11 +476,11 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 	case KEYBOARD_IOC_SET_BRIGHTNESS:
 		if(!argv || copy_from_user(&keyboard_send_msg.cmd, (void *)argv, 1)) {
 			pr_err("Error copy_from_user!\n");
-			return -2;
+			return -1;
 		}
 		if(keyboard_send_msg.cmd < FRAME_CMD_TYPE_SET_BRIGHTNESS_MIN || keyboard_send_msg.cmd > FRAME_CMD_TYPE_SET_BRIGHTNESS_MAX) {
 			pr_err("Error brightness out of range!\n");
-			return -3;
+			return -1;
 		}
 		keyboard_send_msg.cmd_type = FRAME_CMD_TYPE_SET_BRIGHTNESS;
 		set_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);   //置高某一位
@@ -504,7 +504,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 
 			if(!argv || copy_from_user(&user_val, (void *)argv, 1)) {
 				pr_err("Error KEYBOARD_IOC_KEY_LED_FLASH copy_from_user!\n");
-				return -4;
+				return -1;
 			}
 			keyboard_send_msg.cmd = s_user_map_led_value[user_val & 0x3f];//(user_val & 0x3f);	//闪烁哪个灯
 			flashtype = ((user_val >> 6) & 0x3);   //闪烁类型
@@ -518,7 +518,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		unsigned char user_key_code = 0;
 		if(!argv || copy_from_user(&user_key_code, (void *)argv, 1)) {
 			pr_err("Error copy_from_user!\n");
-			return -5;
+			return -1;
 		}
 		// for(; i < KEY_VALUE_TEST; i ++) {
 		// 	if(s_user_key_value[i] == user_key_code) {
@@ -534,7 +534,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		//2023-01-05  不能识别的按键
 		if(keyboard_send_msg.cmd == 0){
 			pr_err("Error keyboard_send_msg.cmd == 0! user_key_code = %d\n",user_key_code);
-			return -6;
+			return -1;
 		}
 
 		// if(i >= KEY_VALUE_TEST) {
@@ -558,7 +558,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 	}
 	default:
 		pr_err("Error non-supported cmd %d\n", cmd);
-		return -7;
+		return -1;
 	}
 	keyboard_send_msg.cmd_verify = FRAME_VERIFY(
 			keyboard_send_msg.cmd_header0,
@@ -582,7 +582,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		pr_err("Error i2c_master_send!\n");
 		mutex_unlock(&iic_Mutex);  //开锁
 		mutex_unlock(&iic_idel_Mutex);  //开锁
-		return -8;
+		return -1;
 	}
 	mutex_unlock(&iic_Mutex);//开锁
 	if(down_timeout(&s_jc_keyboard_info.ioctl_sem, JC_KEYBOARD_I2C_TIMEOUT/4)) {
@@ -593,7 +593,7 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		{
 			pr_err("Error down_timeout!\n");
 			mutex_unlock(&iic_idel_Mutex);  //开锁
-			return -9;
+			return -1;
 		}
 	}
 	mutex_unlock(&iic_idel_Mutex);  //开锁
@@ -602,87 +602,87 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 
 	switch(cmd) {
 	case KEYBOARD_IOC_GET_BRIGHTNESS:
-		if(test_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits))
+		if(test_bit(BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits))
 		{
-			pr_err("Error KEYBOARD_IOC_GET_BRIGHTNESS down_timeout! ----test_bit\n");
-			clear_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);
-			return -20;
+			pr_err("Error KEYBOARD_IOC_GET_BRIGHTNESS down_timeout! ----test_bit %#lx\n",wait_respon_bits);
+			clear_bit(BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);
+			return -1;
 		}
 		if(!argv || copy_to_user((void *)argv, &s_i2c_reply_ret, 1)) {
 			pr_err("Error copy_to_user!\n");
-			return -10;
+			return -1;
 		}
 		break;
 	case KEYBOARD_IOC_GET_PANEL_MODEL:
 		if(test_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits))
 		{
-			pr_err("Error KEYBOARD_IOC_GET_PANEL_MODEL down_timeout! ----test_bit\n");
+			pr_err("Error KEYBOARD_IOC_GET_PANEL_MODEL down_timeout! ----test_bit %#lx\n",wait_respon_bits);
 			clear_bit(PANEL_MODEL_RESPONSE_BIT, &wait_respon_bits);
-			return -21;
+			return -1;
 		}
 		if(!argv || copy_to_user((void *)argv, &s_i2c_reply_ret, 1)) {
 			pr_err("Error copy_to_user!\n");
-			return -10;
+			return -1;
 		}
 		break;
 	case KEYBOARD_IOC_GET_PANEL_VER:
 		if(test_bit(PANEL_VER_RESPONSE_BIT, &wait_respon_bits))
 		{
-			pr_err("Error KEYBOARD_IOC_GET_PANEL_VER down_timeout! ----test_bit\n");
+			pr_err("Error KEYBOARD_IOC_GET_PANEL_VER down_timeout! ----test_bit %#lx\n",wait_respon_bits);
 			clear_bit(PANEL_VER_RESPONSE_BIT, &wait_respon_bits);
-			return -22;
+			return -1;
 		}
 		if(!argv || copy_to_user((void *)argv, &s_i2c_reply_ret, 1)) {
 			pr_err("Error copy_to_user!\n");
-			return -10;
+			return -1;
 		}
 		break;
 	case KEYBOARD_IOC_SET_BRIGHTNESS:
 		if(test_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits))
 		{
-			pr_err("Error KEYBOARD_IOC_SET_BRIGHTNESS down_timeout! ----test_bit\n");
+			pr_err("Error KEYBOARD_IOC_SET_BRIGHTNESS down_timeout! ----test_bit %#lx\n",wait_respon_bits);
 			clear_bit(SET_BRIGHTNESS_RESPONSE_BIT, &wait_respon_bits);
-			return -23;
+			return -1;
 		}
 		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
 			pr_err("Error execute failed!\n");
-			return -11;
+			return -1;
 		}
 		break;
 	case KEYBOARD_IOC_RESET:
 		if(test_bit(RESET_RESPONSE_BIT, &wait_respon_bits))
 		{
-			pr_err("Error KEYBOARD_IOC_RESET down_timeout! ----test_bit\n");
+			pr_err("Error KEYBOARD_IOC_RESET down_timeout! ----test_bit %#lx\n",wait_respon_bits);
 			clear_bit(RESET_RESPONSE_BIT, &wait_respon_bits);
-			return -24;
+			return -1;
 		}
 		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
 			pr_err("Error execute failed!\n");
-			return -11;
+			return -1;
 		}
 		break;	
 	case KEYBOARD_IOC_KEY_LED_ON:
 		if(test_bit(KEY_LED_ON_RESPONSE_BIT, &wait_respon_bits))
 		{
-			pr_err("Error KEYBOARD_IOC_KEY_LED_ON down_timeout! ----test_bit\n");
+			pr_err("Error KEYBOARD_IOC_KEY_LED_ON down_timeout! ----test_bit %#lx\n",wait_respon_bits);
 			clear_bit(KEY_LED_ON_RESPONSE_BIT, &wait_respon_bits);
-			return -25;
+			return -1;
 		}
 		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
 			pr_err("Error execute failed!\n");
-			return -11;
+			return -1;
 		}
 		break;
 	case KEYBOARD_IOC_KEY_LED_OFF:   //灯的控制部分，不再等待应答，2022-09-05		
 		if(test_bit(KEY_LED_OFF_RESPONSE_BIT, &wait_respon_bits))
 		{
-			pr_err("Error KEYBOARD_IOC_KEY_LED_OFF down_timeout! ----test_bit\n");
+			pr_err("Error KEYBOARD_IOC_KEY_LED_OFF down_timeout! ----test_bit %#lx\n",wait_respon_bits);
 			clear_bit(KEY_LED_OFF_RESPONSE_BIT, &wait_respon_bits);
-			return -26;
+			return -1;
 		}//return 0;
 		if(s_i2c_reply_ret == FRAME_CMD_REPLY_FAILED) {
 			pr_err("Error execute failed!\n");
-			return -11;
+			return -1;
 		}
 		break;
 	default:
@@ -690,9 +690,9 @@ static long s_jc_keyboard_unlocked_ioctl(struct file *file, unsigned int cmd, un
 		{
 			if(test_bit(KEY_LED_FLASH_RESPONSE_BIT, &wait_respon_bits))
 			{
-				pr_err("Error KEYBOARD_IOC_KEY_LED_FLASH down_timeout! ----test_bit\n");
+				pr_err("Error KEYBOARD_IOC_KEY_LED_FLASH down_timeout! ----test_bit %#lx\n",wait_respon_bits);
 				clear_bit(KEY_LED_FLASH_RESPONSE_BIT, &wait_respon_bits);
-				return -27;
+				return -1;
 			}
 			return 0;		
 		}

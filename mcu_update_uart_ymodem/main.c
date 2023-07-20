@@ -26,13 +26,14 @@
 #include <string.h>
  /* Ô´ÎÄ¼þÂ·¾¶ */
 //char SourceFile[] = "./app.bin";    
-static const char* my_opt = "f:";
+
 
 //70.需要server关闭串口，防止升级失败
 //val: 0 表示临时关闭，1表示开启
 int drvControlttyS0(int val);  //因为要升级单片机程序，需要临时关闭串口。
 
-
+//别的文件可以引用
+int g_debug_mode = 0;   //调试模式，用于输出一些打印信息，0表示不输出打印信息
 
 #if 0
 void send_update_cmd_tomcu(uint8_t phase)
@@ -156,7 +157,7 @@ static int is_server_process_start(char * cmd_name)
 
 
 
-
+static const char* my_opt = "Df:";
 
 int main(int argc,char* argv[]) 
 {
@@ -180,29 +181,20 @@ int main(int argc,char* argv[])
 	        	case 'f':
 	        		filename = optarg;
 	        		get_name = 1;
-	                //debug_level = atoi(optarg);
 	                printf("filename = %s\n",filename);
+	                break;	
+	            case 'D':
+	        		g_debug_mode  = 1;
+	                printf("Enter Debug mode\n");
 	                break;	       
 	       	 	default:	       
 	                break;
 	                //return 0;
 	        }
-	        if(get_name)  //Ìø³ö´óÑ­»·
-	        	break;
 	    }
 	}
 
-//	if(1 == is_server_process_start("drv722_22134_server"))  //存在server进程
-	{
-//		system("killall drv722_22134_server");
-		// serverflag = 1;
-		// drvControlttyS0(0);  //drv722_22134_server关闭串口
-		// printf("drv722_22134_server is running!!\n");
-	}	
 	uart_init(argc, argv);
-	//sleep(1);
-
-	//sleep(1);
 
     if(0 == xymodem_send(filename))
     	printf("%s is done!\n",argv[0]);

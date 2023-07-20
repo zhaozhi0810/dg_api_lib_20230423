@@ -22,39 +22,7 @@
 #include <unistd.h>
 #include <string.h>
 
-/*
-*********************************************************************************************************
-*	                                   YmodemÎÄ¼þ´«ÊäÐ­Òé½éÉÜ
-*********************************************************************************************************
-*/
-/*
-µÚ1½×¶Î£º Í¬²½
-    ´Ó»ú¸øÊý¾Ý·¢ËÍÍ¬²½×Ö·û C
-    
-µÚ2½×¶Î£º·¢ËÍµÚ1Ö¡Êý¾Ý£¬°üº¬ÎÄ¼þÃûºÍÎÄ¼þ´óÐ¡
-    Ö÷»ú·¢ËÍ£º
-    ---------------------------------------------------------------------------------------
-    | SOH  |  ÐòºÅ - 0x00 |  ÐòºÅÈ¡·´ - 0xff | 128×Ö½ÚÊý¾Ý£¬º¬ÎÄ¼þÃûºÍÎÄ¼þ´óÐ¡×Ö·û´®|CRC0 CRC1|
-    |-------------------------------------------------------------------------------------|  
-	´Ó»ú½ÓÊÕ£º
-    ½ÓÊÕ³É¹¦»Ø¸´ACKºÍCRC16£¬½ÓÊÕÊ§°Ü£¨Ð£Ñé´íÎó£¬ÐòºÅÓÐÎó£©¼ÌÐø»Ø¸´×Ö·ûC£¬³¬¹ýÒ»¶¨´íÎó´ÎÊý£¬»Ø¸´Á½¸öCA£¬ÖÕÖ¹´«Êä¡£
 
-µÚ3½×¶Î£ºÊý¾Ý´«Êä
-    Ö÷»ú·¢ËÍ£º
-    ---------------------------------------------------------------------------------------
-    | SOH/STX  |  ´Ó0x01¿ªÊ¼ÐòºÅ  |  ÐòºÅÈ¡·´ | 128×Ö½Ú»òÕß1024×Ö½Ú                |CRC0 CRC1|
-    |-------------------------------------------------------------------------------------|  
-	´Ó»ú½ÓÊÕ£º
-    ½ÓÊÕ³É¹¦»Ø¸´ACK£¬½ÓÊÕÊ§°Ü£¨Ð£Ñé´íÎó£¬ÐòºÅÓÐÎó£©»òÕßÓÃ»§´¦ÀíÊ§°Ü¼ÌÐø»Ø¸´×Ö·ûC£¬³¬¹ýÒ»¶¨´íÎó´ÎÊý£¬»Ø¸´Á½¸öCA£¬ÖÕÖ¹´«Êä¡£
-
-µÚ4½×¶Î£º½áÊøÖ¡
-    Ö÷»ú·¢ËÍ£º·¢ËÍEOT½áÊø´«Êä¡£
-	´Ó»ú½ÓÊÕ£º»Ø¸´ACK¡£
-
-µÚ5½×¶Î£º¿ÕÖ¡£¬½áÊøÍ¨»°
-    Ö÷»ú·¢ËÍ£ºÒ»Ö¡¿ÕÊý¾Ý¡£
-	´Ó»ú½ÓÊÕ£º»Ø¸´ACK¡£
-*/
 
 #define SOH                     (0x01)  /* start of 128-byte data packet */
 #define STX                     (0x02)  /* start of 1024-byte data packet */
@@ -85,7 +53,7 @@
 
 extern char md5_readBuf[64];   //´æ·ÅÎÄ¼þµÄmd5
 
-
+extern int g_debug_mode;   //调试模式，用于输出一些打印信息，0表示不输出打印信息
 /*
 *********************************************************************************************************
 *	º¯ Êý Ãû: Int2Str
@@ -130,44 +98,38 @@ void Ymodem_PrepareIntialPacket(uint8_t *data, const uint8_t* fileName, uint32_t
 	uint16_t i, j;
 	uint8_t file_ptr[16];
 
-	/* µÚÒ»°üÊý¾ÝµÄÇ°Èý¸ö×Ö·û  */
-	data[0] = SOH; /* soh±íÊ¾Êý¾Ý°üÊÇ128×Ö½Ú */
+	data[0] = SOH; /* soh表示该帧128字节*/
 	data[1] = 0x00;
 	data[2] = 0xff;
 
-	/* ÎÄ¼þÃû */
+	//1.填充文件名，这里FILE_NAME_LENGTH限制为64字节
 	for (i = 0; (fileName[i] != '\0') && (i < FILE_NAME_LENGTH); i++)
 	{
 		data[i + PACKET_HEADER] = fileName[i];
 	}
-//	printf("i+PACKET_HEADER = %d\n",i + PACKET_HEADER);
-	data[i + PACKET_HEADER] = 0x00;
+	data[i + PACKET_HEADER] = 0x00;   //填入字符串结尾符
 
-	/* ÎÄ¼þ´óÐ¡×ª»»³É×Ö·û */
-	//Int2Str (file_ptr, *length);
+	//2.填充文件大小，先把int转为字符串
 	snprintf(file_ptr,sizeof file_ptr-1,"%d ",*length);   //增加一个空格
-//	printf("file_ptr = %s,len = %ld\n",file_ptr,strlen(file_ptr));
 	for (j =0, i = i + PACKET_HEADER + 1; file_ptr[j] != '\0' ; )
 	{
 		data[i++] = file_ptr[j++];
 	}
 
 	data[i] = 0x00;
-//	printf("i  = %d\n",i );
 
+	//3.继续填入md5值，这里是32字节的字符串
 	for (j =0, i = i + 1; (md5_readBuf[j] != '\0') && (j < FILE_MD5_LENGTH) ;i++,j++ )
 	{
 		data[i] = md5_readBuf[j];
-//		printf("data[%d] = %#x\n",i,data[i]);
 	}
-//	printf("i = %d, j = %d\n",i,j);
-	/* ÆäÓà²¹0 */
+
+	//4.其他空间继续填充0
 	for (j = i; j < PACKET_SIZE + PACKET_HEADER; j++)
 	{
 		data[j] = 0;
 	}
 
-	//printf("Ymodem_PrepareIntialPacket done\n");
 }
 
 /*
@@ -224,7 +186,9 @@ void Ymodem_PreparePacket(uint8_t *SourceBuf, uint8_t *data, uint8_t pktNo, uint
 		}
 	}
     sendsize += size;
-    printf("SendSize = %d\r\n", sendsize);
+
+    if(g_debug_mode)  //调试模式下才打印
+    	printf("SendSize = %d\r\n", sendsize);
 }
 
 /*
@@ -317,8 +281,6 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 	uint8_t receivedC[2], CRC16_F = 0, i;
 	uint32_t errors, ackReceived, size = 0, pktSize;
 
-	printf("Ymodem_Transmit \n");
-
 	errors = 0;
 	ackReceived = 0;
 	for (i = 0; i < (FILE_NAME_LENGTH - 1); i++)
@@ -328,15 +290,11 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 
 	CRC16_F = 1;
 
-	/* ³õÊ¼»¯Òª·¢ËÍµÄµÚÒ»¸öÊý¾Ý°ü */
+
 	Ymodem_PrepareIntialPacket(&packet_data[0], filename, &sizeFile);
-  	//printf("PACKET_SIZE + PACKET_HEADER = %d \n",PACKET_SIZE + PACKET_HEADER);
 	do 
 	{
-		/* ·¢ËÍÊý¾Ý°ü */
 		UART_SendPacket(packet_data, PACKET_SIZE + PACKET_HEADER);
-
-		/* ¸ù¾ÝCRC16_F·¢ËÍCRC»òÕßÇóºÍ½øÐÐÐ£Ñé */
 		if (CRC16_F)
 		{
 			tempCRC = Cal_CRC16(&packet_data[3], PACKET_SIZE);
@@ -354,28 +312,20 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 		{
 			if ((receivedC[0] == ACK)&&(receivedC[1] == CRC16))
 			{ 
-				/* ½ÓÊÕµ½Ó¦´ð */
-				//printf("ackReceived = 1 \n");
 				ackReceived = 1;
 			}
 			else if ((receivedC[0] == CA)&&(receivedC[1] == CA))  //ÖÐÖ¹ÐÅºÅ
 			{ 
-				/* ½ÓÊÕµ½Ó¦´ð */
-				//printf("ackReceived = 1 \n");
 				errors =  0x0A;
 				break;
 			}
 		}
-		/* Ã»ÓÐµÈµ½ */
 		else
 		{
-		//	printf("errors = %d \n",errors);
 			errors++;
 		}
-	/* ·¢ËÍÊý¾Ý°üºó½ÓÊÕµ½Ó¦´ð»òÕßÃ»ÓÐµÈµ½¾ÍÍÆ³ö */
 	}while (!ackReceived && (errors < 0x0A));
   
-	/* ³¬¹ý×î´ó´íÎó´ÎÊý¾ÍÍË³ö */
 	if (errors >=  0x0A)
 	{
 		printf("errors = %d return\n",errors);
@@ -386,7 +336,6 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 	size = sizeFile;
 	blkNumber = 0x01;
 
-	/* ÏÂÃæÊ¹ÓÃµÄÊÇ·¢ËÍ1024×Ö½ÚÊý¾Ý°ü */
 	/* Resend packet if NAK  for a count of 10 else end of communication */
 	while (size)
 	{
@@ -489,10 +438,7 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 		return errors;
 	}
 
-    //printf("·¢ËÍ½áÊøÐÅºÅ\r\n");
-
 #if 1
-	/* ³õÊ¼»¯×îºóÒ»°üÒª·¢ËÍµÄÊý¾Ý */
 	ackReceived = 0;
 	receivedC[0] = 0x00;
 	errors = 0;
@@ -501,7 +447,6 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 	packet_data[1] = 0;
 	packet_data [2] = 0xFF;
 
-	/* Êý¾Ý°üµÄÊý¾Ý²¿·ÖÈ«²¿³õÊ¼»¯Îª0 */
 	for (i = PACKET_HEADER; i < (PACKET_SIZE + PACKET_HEADER); i++)
 	{
 		packet_data [i] = 0x00;
@@ -532,16 +477,13 @@ uint8_t Ymodem_Transmit (uint8_t *buf, const uint8_t* sendFileName, uint32_t siz
 		}
 	}while (!ackReceived && (errors < 0x0A));
 
-    //    printf("´¦ÀíÍê±Ï\r\n");
-
-	/* ³¬¹ý10´ÎÃ»ÓÐÊÕµ½Ó¦´ð¾ÍÍË³ö */
 	if (errors >=  0x0A)
 	{
 		return errors;
 	}  
 #endif
 
-	return 0; /* ÎÄ¼þ·¢ËÍ³É¹¦ */
+	return 0; 
 }
 
 
@@ -731,16 +673,11 @@ int32_t cal_md5(unsigned char *result, unsigned char *data, int length){
 //返回0是成功，1是失败
 int get_file_md5sum2(unsigned char * filebuf,int size1)
 {
-//	FILE * fin1;
-//	char cmd[128] = {"md5sum "};
-//	int size1 ;
 	int ret;
-//	int readcount,bw;
-
 
     ret = cal_md5(md5_readBuf, filebuf, size1);
     //md5(buf, size1, md5_readBuf);
-    if(!ret) 
+    if(!ret && g_debug_mode)  //调试模式下才打印) 
     	printf("cal_md5 = %s\n",md5_readBuf);
 
     return ret;
@@ -775,125 +712,44 @@ static int ready_to_update(void)
 	int ret;
 	uint8_t i = 0;
 
-#if 0
-	// do{
-	// 	ret = UART_ReceiveByte (data, 2000);  //¶ÁÈ¡»º´æµÄ×Ö·û
-	// 	if(!ret && (data[0] == 0x43))
-	// 	{
-	// 		printf("UART_ReceiveByte 0x43\n");
-	// 		break;
-	// 	}
-	// }while(ret==0);
-	
-	//if(data[0] != 0x43)
-	{
-		printf("send_update_cmd_tomcu(0)\n");
-		do
-		{	
-			send_update_cmd_tomcu(0);		
-			do{
-				i++;
-				if(i>=10)
-				{
-					ret = -1;	
-					break;
-				}
-				ret = UART_ReceiveByte (data, 100);  //¶ÁÈ¡»º´æµÄ×Ö·û
-			}while(ret != 0 || *data != 0xa5);
-			if(ret ==0)
-			{
-				do{
-					ret = UART_ReceiveByte (data+1, 100);  //¶ÁÈ¡»º´æµÄ×Ö·û
-				}while(ret != 0);
-			}			
-			usleep(500000);
-		}		
-		while(*data != 0xa5 || *(data+1)!= 0xa5);
-		//usleep(500000);
-		ret = UART_ReceivePacket (data+2, 33, 1000);
-		if(ret == 0)
-		{
-			rsum = data[34];
-			data[34] = 0;
-			printf("Receive mcu checksum: %s\n",data+2);
-
-			// for(c=0;c<35;c++)
-			// 	printf("%x ",data[c]);
-			// printf("\n");
-
-			csum = checksum(data, 34);
-			if(csum == rsum)  //Ð£Ñé³É¹¦
-			{
-				if(memcmp(data+2,md5_readBuf,32)==0) //md5 ÊÇÏàÍ¬µÄ£¬²»Éý¼¶
-				{
-					printf("md5sum memcmp ret = 0,is the same\n");
-					printf("not need update!!!\n");
-					return 1;
-				}
-				else
-				{
-					printf("md5sum different , readyto update\n");
-					send_update_cmd_tomcu(1); //ÐèÒªÉý¼¶
-					return 0;
-				}	
-			}
-			else
-			{
-				printf("checksum error csum = %d,rsum = %d\n",csum,rsum);
-				uart_exit();
-				return -1;
-			}
-		}
-		else  //串口接收失败！！
-		{
-			printf("UART_ReceivePacket 2000 ret = %d != 0 \n",ret);
-			return -1;
-		}
-	}		
-
-#else
+	//1.发送请求md5单片机命令，单片机返回32个字节的md5值（实际不止，还有帧头帧尾）
 	ret = send_update_cmd_tomcu(data,0);
-
 	if(ret == 0)
 	{
 		rsum = data[34];
 		data[34] = 0;
-		printf("Receive mcu checksum: %s\n",data+2);
+		if(g_debug_mode)  //调试模式下才打印
+			printf("Receive mcu checksum: %s\n",data+2);
 
-		// printf("\nmd5 bin = \n");
-		// for(c=0;c<35;c++)
-		// 	printf("%x ",data[c]);
-		// printf("\n");
-
-		csum = checksum(data, 34);
-		if(csum == rsum)  //Ð£Ñé³É¹¦
+		csum = checksum(data, 34);  //帧尾包含校验和，计算这一帧的校验和
+		if(csum == rsum)  //校验和正常
 		{
-			if(memcmp(data+2,md5_readBuf,32)==0) //md5 ÊÇÏàÍ¬µÄ£¬²»Éý¼¶
+			if(memcmp(data+2,md5_readBuf,32)==0) //md5 对比，发现与bin文件相同，则不进行升级
 			{
-				printf("md5sum memcmp ret = 0,is the same\n");
-				printf("not need update!!!\n");
+				//if(g_debug_mode)  //调试模式下才打印
+				{
+					printf("md5sum memcmp ret = 0,is the same\n");
+					printf("not need update!!!\n");
+				}				
 				return 1;
 			}
-			else
+			else  //md5不同，则继续
 			{
-				printf("md5sum different , readyto update\n");
-				return send_update_cmd_tomcu(NULL,1); //正常返回0，其他返回-1
+				if(g_debug_mode)  //调试模式下才打印
+					printf("md5sum different , readyto update\n");
+				return send_update_cmd_tomcu(NULL,1); //发送准备升级命令，正常返回0，其他返回-1
 				//return 0;
 			}	
 		}
-		else
+		else //收到单片机的数据，但是校验和不正常，应该数据有问题，结束升级
 		{
 			printf("checksum error csum = %d,rsum = %d\n",csum,rsum);
 			//uart_exit();
 			return -1;
 		}
 	}
-
-
-
-#endif
-
-	printf("ready to update!\n");
+	if(g_debug_mode)  //调试模式下才打印
+		printf("ready to update!\n");
 	return 0;
 }
 
@@ -910,68 +766,25 @@ char* file_read_check(const char *filename,int *filesize)
     int size = 0;
     int bw = 0;       
     int readcount = 0;
-//    char filename_md5[64] = {0};
+
     char md5_value[64] = {0};
     int file_offset = 0;
 
-
-    len = strlen(filename);
+    //1.判断文件名的长度，太长了缓存不够，其实意义不大，这里主要考虑就是绝对路径的时候，可能会比较长
+    len = strlen(filename);   
     if(len < 5 || len > 63)
     {
     	printf("ERROR: filename length = %ld <5-63>\n",len);
     	return NULL;
     }
 
-#if 0    //不再需要md5文件，从bin文件中读出来，2023-07-05
-    strncpy(filename_md5,filename,len-9);    //调整一下后缀
-    strcat(filename_md5,".md5");   //形成文件名后缀为md5。
-
-    printf("md5file_name = %s\n",filename_md5);
-    fin = fopen(filename_md5, "rb");
-    if (fin != NULL)
-    {
-        /* 文件打开成功*/
-        printf("open %s success\r\n",filename_md5);
-    }
-    else
-    {
-        printf("open %s error\r\n",filename_md5);
-        return NULL;
-    }
-
-    //md5文件的第一行必须是md5值，一次性读出32字节，否则失败
-    bw = fread(md5_value, 1, 32, fin);
-    if(bw != 32)
-    {
-    	fclose(fin);
-    	printf("ERROR: read md5_file failed ! md5_value = %s ret = %d\n",md5_value,bw);
-    	return NULL;
-    }
-    fclose(fin);
-    printf("read md5_file success! md5_value = %s\n",md5_value);
-#endif
-	// ret = get_file_md5sum(filename);
-	// if(ret > 0)
-	// {
-	// 	printf("get_file_md5sum = %s,strlen = %lu\n",md5_readBuf,strlen(md5_readBuf));
-	// 	//比较文件的md5
-	// 	if(strcmp(md5_readBuf,md5_value))
-	// 	{
-	// 		printf("md5 compare failed ! please check bin file!!!!\n");
-	// 		return NULL;
-	// 	}
-	// }
-	// else
-	// {
-	// 	printf("error : get_file_md5sum \n");
-	// 	return NULL;
-	// }
-
+    //2.只读方式打开
     fin = fopen(filename, "rb");
     if (fin != NULL)
     {
         /* 文件打开成功*/
-        printf("open %s success\r\n",filename);
+        if(g_debug_mode)  //调试模式下才打印
+        	printf("open %s success \r\n",filename);
     }
     else
     {
@@ -979,16 +792,12 @@ char* file_read_check(const char *filename,int *filesize)
         return NULL;
     }
 
-    // fseek(fin, 0, SEEK_END);
-    // size = ftell(fin);
-    // fseek(fin, 0, SEEK_SET);
-    // printf("file size = %d\r\n", size);
-
+    //3.计算iap的长度，用区分不同单片机的bin文件，所以偏移不一定相同
     file_offset = ApplicationAddress & 0x7f00;  //iap的偏移全部去掉
     fseek(fin, 0, SEEK_END);
-    size = ftell(fin);
+    size = ftell(fin);   //得到文件长度
 
-    //从bin文件读取md5值
+    //4.从bin文件读取md5值
     fseek(fin, file_offset-512, SEEK_SET);   //读出md5,2023-06-12 增加一个偏移
     bw = fread(md5_value, 1, 32, fin);
     if(bw != 32)
@@ -997,14 +806,16 @@ char* file_read_check(const char *filename,int *filesize)
     	printf("ERROR: read bin md5 failed ! ret = %d\n",bw);
     	return NULL;
     }
-    printf("read bin md5 success! md5_value = %s\n",md5_value);
+    if(g_debug_mode)  //调试模式下才打印
+    	printf("read bin md5 success! md5_value = %s\n",md5_value);
 
-
-
+    //5.计算去掉iap+1k的文件长度，这iap+1k部分不要了
     fseek(fin, file_offset, SEEK_SET);   //读取的位置也是不从0开始
     size -= (file_offset);  //去掉偏移的字节
-    printf("file size = %d\r\n", size);
+    if(g_debug_mode)  //调试模式下才打印
+    	printf("file size = %d\r\n", size);
 
+    //6.分配缓存，用于把文件的内容全部读出来
     char* buf = malloc(size);
     if(buf == NULL)
     {
@@ -1013,36 +824,38 @@ char* file_read_check(const char *filename,int *filesize)
     	return NULL;
     }
 
+    //7.把文件读出来
     do
     {
         bw = fread(&buf[readcount], 1, size, fin);
         readcount += bw;
     } while (readcount < size);
-
-    printf("file readcount = %d\r\n", readcount);
+    if(g_debug_mode)  //调试模式下才打印
+    	printf("file readcount = %d\r\n", readcount);
     fclose(fin);
 
-    //比较md5
+    //8.比较md5，对缓存中的内容计算md5，再与刚刚从bin文件中读取的md5进行比较
     ret = get_file_md5sum2(buf,size);
 	if(ret == 0)
 	{
-		printf("get_file_md5sum = %s,strlen = %lu\n",md5_readBuf,strlen(md5_readBuf));
+		if(g_debug_mode)  //调试模式下才打印
+			printf("get_file_md5sum = %s,strlen = %lu\n",md5_readBuf,strlen(md5_readBuf));
 		//比较文件的md5
-		if(strcmp(md5_readBuf,md5_value))
+		if(strcmp(md5_readBuf,md5_value))  //md5异常，为无效bin文件，不能进行升级。
 		{
 			printf("md5 compare failed ! please check bin file!!!!\n");
 			free(buf);
 			return NULL;
 		}
 	}
-	else
+	else  //9. md5 获取失败，不进行升级
 	{
 		printf("error : get_file_md5sum ret = %d\n",ret);
 		free(buf);
 		return NULL;
 	}
 
-
+	//10.对bin文件内容进行判断，单片机的bin文件0-3这4个字节一定是0x20000000开头
     if (((*(uint32_t*)buf) & 0xfFFE0000 ) != 0x20000000)
 	{
 		printf("image addr 0 != 0x20000000\n");
@@ -1050,15 +863,15 @@ char* file_read_check(const char *filename,int *filesize)
 		free(buf);
 		return NULL;
 	}
-	else if(((*(uint32_t*)(buf+4)) & 0xfFFffc00 ) != ApplicationAddress)
+	else if(((*(uint32_t*)(buf+4)) & 0xfFFffc00 ) != ApplicationAddress)//单片机的bin文件4-7这4个字节一定是与镜像的偏移有关
 	{
 		printf("image  addr %#x != ApplicationAddress %#x\n",((*(uint32_t*)(buf+4)) & 0xfFFffc00 ),ApplicationAddress);
 		printf("ERROR: bad image(bin)!!!!! update cancle!!!,please check again!!!");
 		free(buf);
 		return NULL;
 	}
-	*filesize = size;
-	return buf;
+	*filesize = size;   //返回文件大小
+	return buf;  //返回文件的内容的首地址
 }
 
 
@@ -1081,6 +894,8 @@ int xymodem_send(const char *filename)
     int recv_0x43 = 0;//adcount = 0, remain = 0;
 	char *buf;
 
+	//1.读取bin文件，并且判断md5是否正确，返回bin文件内容的首地址（正常返回时，bin文件已经被读出来了，存在在buf指定的控件）
+	//md5正确时，对应的md5存放在全局变量md5_readBuf中。
 	buf = file_read_check(filename,&size);
 	if(buf == NULL)
 	{
@@ -1088,18 +903,20 @@ int xymodem_send(const char *filename)
 		return -1;
 	}
 
-	//读取缓存中的所有数据
-
+	//2.读取串口缓存中的所有数据，以免被缓存的数据干扰，等待新的数据过来
 	do
 	{
-		ret = UART_ReceiveByte (data, 500);  //
+		ret = UART_ReceiveByte (data, 500);  //这是超时读取，500ms的超时
 		if(!ret && data[0] == 0x43)
 			recv_0x43 = 1;
-	}while(ret == 0);
+	}while(ret == 0);  //如果有数据就一直读，直到返回-1，表示没有读到数据了。
 
-	if(!recv_0x43)  //没有收到数据，或者收到的不是0x43
+	//3.收到的不是0x43，表示单片机此时没有进入到下载模式，需要发送下载命令，让单片机进入到下载模式
+	if(!recv_0x43)  //没有收到数据，或者收到的不是0x43，表示
 	{
-		printf("enter ready_to_update\n");
+		if(g_debug_mode)  //调试模式下才打印
+			printf("enter ready_to_update\n");
+		//4.
 		if(ready_to_update())   //不等于0就是退出
 		{
 			free(buf);
@@ -1107,10 +924,12 @@ int xymodem_send(const char *filename)
 			return -1;
 		}	
 
+		//5.单片机进入到下载模式时，会不断给上位机发送0x43的数据。等待这个数据，用于单片机进入下载模式
 		do
 		{
-			printf("wait for mcu ready ...  ... timeout = %d \n",timeout++);
-			if(timeout >= 600)   //10·ÖÖÓ¹ýÈ¥ÁË
+			if(g_debug_mode)  //调试模式下才打印
+				printf("wait for mcu ready ...  ... timeout = %d \n",timeout++);
+			if(timeout >= 600)   //10·等待超时退出
 			{
 				printf("wait for mcu ready timeout,abort now \n");
 				free(buf);
@@ -1119,10 +938,12 @@ int xymodem_send(const char *filename)
 			ret = UART_ReceiveByte (data,  1000);
 			if(ret == 0)
 			{
-				printf("3.data[0] = %#x\n",data[0]);
+				if(g_debug_mode)  //调试模式下才打印
+					printf("3.data[0] = %#x\n",data[0]);
 				if(data[0] == 0x43)
 				{
-					printf("recive 0x43 ----2\n");
+					if(g_debug_mode)  //调试模式下才打印
+						printf("recive 0x43 ----2\n");
 					break;
 				}						
 			}
@@ -1130,15 +951,18 @@ int xymodem_send(const char *filename)
 
 
 	}
-	else
+	else if(g_debug_mode)  //调试模式下才打印  //6.表示读到了0x43，表示单片机此时已经进入到下载模式，在不断给上位机发送0x43的数据。
 		printf("recive 0x43 ----1\n");
 
-	printf("go to update now!!!\n");	
+	if(g_debug_mode)  //调试模式下才打印
+		printf("go to update now!!!\n");	
 
+	//7.一切准备就绪，开始发送流程
     Ymodem_Transmit(buf, filename, size);
 
+    //8.释放空间
     free(buf);
     return 0;
 }
 
-/***************************** °²¸»À³µç×Ó www.armfly.com (END OF FILE) *********************************/
+
