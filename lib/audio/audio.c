@@ -381,8 +381,8 @@ void drvDisableEarphout(void) {
 	CHECK(!s_write_reg(ES8388_DACPOWER, val), , "Error s_write_reg!");
 #ifdef VOL_MUTE_HANDLE_BY_REDUCE
 	CHECK(!s_read_reg(ES8388_DACCONTROL27, &output_vol[0]), , "Error s_read_reg!");
-	CHECK(!s_write_reg(ES8388_DACCONTROL27, 0), , "Error s_read_reg!");  //音量调为0
-	CHECK(!s_write_reg(ES8388_DACCONTROL24, 0), , "Error s_read_reg!");  //音量调为0
+	CHECK(!s_write_reg(ES8388_DACCONTROL27, 0), , "Error s_write_reg! ES8388_DACCONTROL27");  //音量调为0
+	CHECK(!s_write_reg(ES8388_DACCONTROL24, 0), , "Error s_write_reg! ES8388_DACCONTROL24");  //音量调为0
 #endif
 }
 
@@ -394,6 +394,28 @@ void drvMuteAllMic(void)
 	CHECK(!s_write_reg(ES8388_ADCCONTROL2, 0xa0), , "Error drvMuteAllMic!");
 }
 
+
+//2024-01-03 调整mac增益        by zhaodazhi
+//value 范围0-192 ，大于192 ，取值192
+void drvAdjustAdc1Tune(unsigned char  value)
+{
+	if(value > 192)
+		value = 192;
+
+	CHECK(!s_write_reg(ES8388_ADCCONTROL8, value), , "Error s_write_reg! ES8388_ADCCONTROL8");  //音量调为0
+	
+}
+
+//2024-01-03 调整mac增益        by zhaodazhi
+//value 范围0-192 ，大于192 ，取值192
+void drvAdjustAdc2Tune(unsigned char  value)
+{
+	if(value > 192)
+		value = 192;
+	
+	CHECK(!s_write_reg(ES8388_ADCCONTROL9, value), , "Error s_write_reg! ES8388_ADCCONTROL9");
+
+}
 
 
 

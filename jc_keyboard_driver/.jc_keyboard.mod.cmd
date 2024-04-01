@@ -1,0 +1,1 @@
+cmd_/home/dazhi/3399pro/rootfs_deepin/JC.MEB9194-Lib/jc_keyboard_driver/jc_keyboard.mod := { echo  /home/dazhi/3399pro/rootfs_deepin/JC.MEB9194-Lib/jc_keyboard_driver/jc_keyboard.o;  echo; } > /home/dazhi/3399pro/rootfs_deepin/JC.MEB9194-Lib/jc_keyboard_driver/jc_keyboard.mod

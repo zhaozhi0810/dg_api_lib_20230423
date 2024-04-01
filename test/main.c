@@ -12,6 +12,9 @@
 #include <errno.h>
 #include <string.h>
 #include <pthread.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdarg.h>
 
 #include "drv722.h"
 #include "debug.h"
@@ -74,6 +77,9 @@ enum {
 	TEST_ITEM_GET_BORAD_MCUVERSION_STATUS,  //获得导光面板按键版本信息,44
 	TEST_ITEM_GET_YT8521SH_STATUS,              //45
 	TEST_ITEM_SET_LEDS_FLASH                   //46,增加led闪烁控制
+	,TEST_ITEM_SET_ADC1_VALUE				//47 设置adc1的值0-192
+	,TEST_ITEM_SET_ADC2_VALUE				//48 设置adc2的值0-192
+	,TEST_ITEM_TOUCHSCREEN_RESET				//49 触摸屏重启，2024-03-19
 }; 
 
 extern int drvCoreBoardExit(void);
@@ -188,12 +194,20 @@ static void s_show_usage(void) {
 	printf("\t%2d - Get KEYBORAD MCU software Version\n", TEST_ITEM_GET_BORAD_MCUVERSION_STATUS);
 	printf("\t%2d - HAS YT8521SH Device??\n", TEST_ITEM_GET_YT8521SH_STATUS);
 	printf("\t%2d - Set keyLights flash\n", TEST_ITEM_SET_LEDS_FLASH);
+	printf("\t%2d - Set Adc1 value (0-192)\n", TEST_ITEM_SET_ADC1_VALUE);
+	printf("\t%2d - Set Adc2 value (0-192)\n", TEST_ITEM_SET_ADC2_VALUE);
+	printf("\t%2d - Touchscreen reset\n", TEST_ITEM_TOUCHSCREEN_RESET);  //2024-0319 触摸屏重启
+	
 	printf("\tOther - Exit\n");
 }
 
 static void s_sighandler(int signum) {
 	INFO("Receive signal %d, program will be exit!", signum);
 }
+
+
+
+
 
 static int s_signal_init(void) {
 	struct sigaction act;
@@ -225,11 +239,13 @@ static void *s_watchdog_feed_thread(void *param) {
 		if(!(index % WATCHDOG_TIMEOUT)) {
 			drvWatchDogFeeding();
 			INFO("Watchdog feed success!");
+			myjc_log_printf("Watchdog feed success!");
 		}
 		index ++;
 		sleep(1);
 	}
 	INFO("Stop feed watchdog!");
+	myjc_log_printf("Stop feed watchdog!");
 	return NULL;
 }
 
@@ -269,7 +285,7 @@ int main(int args, char *argv[]) {
 	int test_item_index = -1;
 	pthread_t watchdog_feed_thread_id = 0;
 
-	INFO("Enter %s", __func__);
+	INFO("Enter %s,2024-0319", __func__);
 	CHECK(!s_signal_init(), -1, "Error s_signal_init!");
 	CHECK(!drvCoreBoardInit(), -1, "Error drvCoreBoardInit!");
 
@@ -659,6 +675,46 @@ int main(int args, char *argv[]) {
 			drvFlashLEDs(KeyIndex,nBrtVal);
 		}
 		break;
+
+		case TEST_ITEM_SET_ADC1_VALUE:{
+			int value;
+			
+			INFO("Please input KeyIndex: (0-192)");
+			if((value = get_stdin_a_num()) == -1) {//if(scanf("%d", &KeyIndex) != 1) {
+				ERR("您的输入有误，请重新输入\n");
+				continue;
+			}
+			if(value<0 || value > 192){
+				ERR("Error value<0 || value > 192");
+				continue;
+			}
+
+			drvAdjustAdc1Tune(value);
+		}
+		break;
+
+		case TEST_ITEM_SET_ADC2_VALUE:{
+			int value;
+			
+			INFO("Please input KeyIndex: (0-192)");
+			if((value = get_stdin_a_num()) == -1) {//if(scanf("%d", &KeyIndex) != 1) {
+				ERR("您的输入有误，请重新输入\n");
+				continue;
+			}
+			if(value<0 || value > 192){
+				ERR("Error value<0 || value > 192");
+				continue;
+			}
+
+			drvAdjustAdc2Tune(value);
+		}
+		break;
+
+		case TEST_ITEM_TOUCHSCREEN_RESET:
+			INFO("drvResetTouchModule");
+			drvResetTouchModule() ;			
+		break;
+
 		
 		default:
 			s_main_thread_exit = true;

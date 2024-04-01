@@ -247,3 +247,33 @@ int drvGetLCDMcuVersion(void) {
 
 
 
+
+//复位触摸屏，得发送串口命令
+int drvResetTouchModule(void) {
+	//3399没有连接reset引脚，在单片机上
+	unsigned char type = 0;
+	if(uart_fd <= 0)//2022-11-24  不想反复打开了，就打开一次吧，把所有关闭都取消了。
+	{
+		if(lcd_uart_open() < 0)
+			return -1;
+	}
+	
+
+	if(s_uart_cmd_send(uart_fd, SCREEN_COMM_CMD_RESET_TOUCH, NULL)) {
+		ERR("Error：Reset touch： s_uart_cmd_send!");
+	//	uart_device_exit(uart_fd);
+		return -1;
+	}
+
+	if(s_uart_cmd_recv(uart_fd, SCREEN_COMM_CMD_RESET_TOUCH, &type)) {
+		ERR("Error：Reset touch： s_uart_cmd_recv!");
+	//	uart_device_exit(uart_fd);
+		return -1;
+	}
+	return 0;
+}
+
+
+
+
+

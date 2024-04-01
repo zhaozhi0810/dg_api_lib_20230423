@@ -28,6 +28,11 @@ static int s_touchscreen_control(bool enable) {
 	return 0;
 }
 
+
+
+
+
+
 void drvEnableTouchModule(void) {
 	CHECK(!s_touchscreen_control(true), , "Error s_touchscreen_write_cmd!");
 }

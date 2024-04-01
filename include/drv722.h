@@ -49,6 +49,9 @@ extern void drvDisableLcdScreen(void);
 extern void drvEnableTouchModule(void);
 extern void drvDisableTouchModule(void);
 
+
+
+
 extern int drvGetLCDType(void);
 extern int getKeyboardType(void);
 extern int getKeyboardType_gztest(void);
@@ -120,10 +123,22 @@ extern void drvMuteAllMic(void);
 
 //2023-04-06.增加键灯led闪烁接口 (nKeyIndex：1-43)
 //闪烁类型0-3（0：500ms,1:800ms,2:1s:3:2s）
-void drvFlashLEDs(int nKeyIndex,unsigned char flash_type);
+extern void drvFlashLEDs(int nKeyIndex,unsigned char flash_type);
 
 //2023-05-12 获取编译时间和版本信息。
-void drvGetBuildtimeVersion(char* time32,int *version);
+extern void drvGetBuildtimeVersion(char* time32,int *version);
+
+
+//2024-01-03 获取编译时间和版本信息。
+//value 范围0-192 ，大于192 ，取值192
+extern void drvAdjustAdc1Tune(unsigned char  value);
+extern void drvAdjustAdc2Tune(unsigned char  value);
+//2024-03-19 复位触摸屏，得发送串口命令
+extern int drvResetTouchModule(void) ;
+
+
+extern void myjc_log_printf(const char *format,...);
+
 
 
 #endif /* DRV722_H_ */

@@ -839,6 +839,6 @@ module_i2c_driver(s_i2c_driver_jc_keyboard);     //2023-03-30  增加
 // module_exit(s_jc_keyboard_exit);
 // date 需要修改内核的makefile ，注释 886 KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
 MODULE_DESCRIPTION("Buildtime :"__DATE__" "__TIME__);
-MODULE_AUTHOR("dazhi@jc,keyboard,2023-05");
+MODULE_AUTHOR("dazhi@jc,keyboard,2023-11");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.1.0");    //2023-05-10 版本1.1.0
+MODULE_VERSION("1.1.1");    //2023-11-29 版本1.1.1/2023-05-10 版本1.1.0

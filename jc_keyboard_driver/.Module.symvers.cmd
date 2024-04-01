@@ -1,0 +1,1 @@
+cmd_/home/dazhi/3399pro/rootfs_deepin/JC.MEB9194-Lib/jc_keyboard_driver/Module.symvers := sed 's/\.ko$$/\.o/' /home/dazhi/3399pro/rootfs_deepin/JC.MEB9194-Lib/jc_keyboard_driver/modules.order | scripts/mod/modpost     -o /home/dazhi/3399pro/rootfs_deepin/JC.MEB9194-Lib/jc_keyboard_driver/Module.symvers -e -i Module.symvers   -T -

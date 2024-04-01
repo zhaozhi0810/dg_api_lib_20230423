@@ -15,6 +15,11 @@
 #include <linux/input.h>
 #include <linux/rtc.h>
 
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+
+
 #include "debug.h"
 #include "drv722.h"
 #include "keyboard.h"
@@ -170,12 +175,49 @@ static unsigned char es8388_reg[] = {
 	0xaa  /* 52 , 0x00, 0x00, 0x00*/
 };
 
+//2024-03-28 增加
+//void *g_wdg_feeding_watch_thread(void *param) ;
+extern int* is_wdg_feeding_p;
+
+
+void myjc_shm_init()
+{
+	// 创建共享内存 int shmget(key_t key, size_t size, int shmflg);
+    key_t key = 1539990;
+    int nShmId = shmget(key, 32, IPC_CREAT | 0664);
+    if (0 > nShmId)
+    {
+        perror("shmget error");
+        return ;
+    }
+
+    // 关联共享内存 void *shmat(int shmid, const void *shmaddr, int shmflg);
+    is_wdg_feeding_p = shmat(nShmId, NULL, 0);
+    if ((void *)(-1) == is_wdg_feeding_p)
+    {
+        perror("shmat error");
+        return ;
+    }
+
+	myjc_log_printf("shm creat success !!\n");
+
+	if(access("/root/log_wdg_proess",F_OK) != -1)
+	{
+		system("/root/log_wdg_proess &");
+		myjc_log_printf("system log_wdg_proess success !!\n");
+	}
+	
+	
+}
+
+
+
 
 
 
 int drvCoreBoardInit(void) {
 	int i,ret;
-
+	//pthread_t wtg_thread_id = 0;
 	keyboard_init();  //只调用不判断  2022-11-24
 
 
@@ -204,7 +246,12 @@ int drvCoreBoardInit(void) {
 		return -1;
 	}
 
-
+	//2024-03-28 增加
+	myjc_shm_init();  //设置一个共享内存，用于喂狗的读写操作
+//	if(pthread_create(&wtg_thread_id, NULL, g_wdg_feeding_watch_thread, NULL)) {
+//		ERR("Error pthread_create with %d: %s", errno, strerror(errno));			
+//	}
+	
 //	printf("drvCoreBoardInit 2023-02-22\n");
 
 	

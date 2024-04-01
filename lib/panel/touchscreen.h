@@ -12,4 +12,6 @@
 #define TOUCHSCREEN_ILITEK_CONTROL_ENABLE	"start_report"
 #define TOUCHSCREEN_ILITEK_CONTROL_DISABLE	"stop_report"
 
+
+
 #endif /* LIB_PANEL_TOUCHSCREEN_H_ */

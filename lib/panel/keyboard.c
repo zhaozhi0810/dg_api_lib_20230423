@@ -101,8 +101,7 @@ int keyboard_init(void) {
 	input_device_num = get_event_dev(JC_KEYBOARD_DRIVER_NAME);
 	printf("keyboard_init input_device_num = %d\n",input_device_num);
 	CHECK((input_device_num >= 0), -1, "Error get_event_dev!");
-	printf("keyboard_init xxxxxxx\n");
-
+	
 	snprintf(s_keyboard_info.event_dev_name, sizeof(s_keyboard_info.event_dev_name), "/dev/input/event%d", input_device_num);
 	snprintf(s_keyboard_info.keyboard_dev_name, sizeof(s_keyboard_info.keyboard_dev_name), "/dev/%s", JC_KEYBOARD_DRIVER_NAME);
 
@@ -236,7 +235,7 @@ int drvIfBrdReset(void) {
 }
 
 //KEYBOARD_IOC_GET_PANEL_VER,2023-01-03
-static char g_mcu_version = -1;
+static int g_mcu_version = -1;
 int getKeyboardMcuVersion(void) {
 
 	if(g_mcu_version > 0)
@@ -244,8 +243,10 @@ int getKeyboardMcuVersion(void) {
 
 	if(!key_inited)
 	{
-		return -1;
+		printf("error: key  inited failed ??\n");
+		return -2;
 	}
+
 	CHECK(!s_ioctl_cmd(KEYBOARD_IOC_GET_PANEL_VER, &s_keyboard_info.version), -1, "Error :getKeyboardMcuVersion:s_ioctl_cmd!");
 	g_mcu_version = s_keyboard_info.version;
 

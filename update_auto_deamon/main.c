@@ -468,8 +468,6 @@ int update_software_now(void)
 						perror("mySystem10");
 				}
 			}
-
-
 		}
 		else if(!checked[4] && strncmp("uboot.img",direntp->d_name,strlen("uboot.img")) == 0)   //需要同时升级trust
 		{
@@ -641,7 +639,7 @@ int update_software_now(void)
 		}
 	}
 
-
+	mySystem("sync");
 	chdir("../");
 
 	return 0;
